@@ -1,0 +1,133 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  fullName  String
+  phone     String   @unique
+  password  String
+  createdAt DateTime @default(now())
+
+  listings  SwapListing[]
+}
+
+model SwapListing {
+  id        String   @id @default(uuid())
+  userId    String
+  status    ListingStatus @default(DRAFT)
+
+  // WHAT USER IS LOOKING FOR
+  desiredType String
+  desiredCity String
+  maxBudget   Int
+  timeline    String
+
+  // WHAT USER IS LEAVING
+  currentType String
+  currentCity String
+  currentRent Int
+  availableOn DateTime
+
+  features  String[]
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+enum ListingStatus {
+  DRAFT
+  ACTIVE
+  MATCHED
+  CLOSED
+}
+
+enum ChainStatus {
+  PENDING
+  LOCKED
+  BROKEN
+}
+
+enum ChainType {
+  DIRECT
+  CIRCULAR
+}
+
+model MatchCandidate {
+  id        String   @id @default(uuid())
+
+  fromListingId String
+  toListingId   String
+
+  cityScore     Int
+  typeScore     Int
+  budgetScore   Int
+  timelineScore Int
+  totalScore    Int
+
+  createdAt DateTime @default(now())
+
+  @@unique([fromListingId, toListingId])
+}
+
+model SwapChain {
+  id        String      @id @default(uuid())
+  status    ChainStatus @default(PENDING)
+  type      ChainType   @default(CIRCULAR)
+
+  cycleSize Int
+  avgScore  Int
+
+  // prevents mirrored duplicates
+  cycleHash String      @unique
+
+  createdAt DateTime    @default(now())
+
+  members   SwapChainMember[]
+  contactUnlocks ContactUnlock[]
+}
+
+model SwapChainMember {
+  id        String @id @default(uuid())
+  chainId   String
+  listingId String
+  userId    String
+  position  Int
+
+  hasAccepted Boolean @default(false)
+
+  chain SwapChain @relation(fields: [chainId], references: [id])
+
+  @@unique([chainId, listingId])
+  @@index([userId])
+}
+
+model ContactUnlock {
+  id        String @id @default(uuid())
+  chainId   String
+  requesterUserId String
+  createdAt DateTime @default(now())
+
+  approvals ContactUnlockApproval[]
+
+  chain SwapChain @relation(fields: [chainId], references: [id])
+
+  @@index([chainId])
+}
+
+model ContactUnlockApproval {
+  id            String @id @default(uuid())
+  contactUnlockId String
+  approverUserId  String
+  approved        Boolean @default(true)
+  createdAt       DateTime @default(now())
+
+  contactUnlock ContactUnlock @relation(fields: [contactUnlockId], references: [id])
+
+  @@unique([contactUnlockId, approverUserId])
+}

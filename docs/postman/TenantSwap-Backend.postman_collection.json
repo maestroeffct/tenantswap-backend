@@ -1,0 +1,452 @@
+{
+  "info": {
+    "name": "TenantSwap Backend API",
+    "description": "Complete API collection for TenantSwap backend.\n\nWorkflow:\n1. Register or Login\n2. Create Listings\n3. Run Matching\n4. Accept/Decline Chain\n5. Unlock Contacts",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{accessToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000"
+    },
+    {
+      "key": "accessToken",
+      "value": ""
+    },
+    {
+      "key": "listingId",
+      "value": ""
+    },
+    {
+      "key": "chainId",
+      "value": ""
+    },
+    {
+      "key": "unlockId",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "GET /",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "Basic health check route."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "POST /auth/register",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let data = {};",
+                  "try { data = pm.response.json(); } catch (e) {}",
+                  "if (data.accessToken) pm.collectionVariables.set('accessToken', data.accessToken);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Ada Lovelace\",\n  \"phone\": \"+2348012345678\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "register"
+              ]
+            },
+            "description": "Register a new user and return JWT access token."
+          }
+        },
+        {
+          "name": "POST /auth/login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let data = {};",
+                  "try { data = pm.response.json(); } catch (e) {}",
+                  "if (data.accessToken) pm.collectionVariables.set('accessToken', data.accessToken);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"+2348012345678\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Login with phone/password and return JWT access token."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "GET /users/me",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "me"
+              ]
+            },
+            "description": "Fetch currently authenticated user profile payload."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Listings",
+      "item": [
+        {
+          "name": "POST /listings",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let data = {};",
+                  "try { data = pm.response.json(); } catch (e) {}",
+                  "if (data.listing && data.listing.id) pm.collectionVariables.set('listingId', data.listing.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"desiredType\": \"2-Bedroom Apartment\",\n  \"desiredCity\": \"Lagos\",\n  \"maxBudget\": 2500000,\n  \"timeline\": \"Within 2 months\",\n  \"currentType\": \"1-Bedroom Apartment\",\n  \"currentCity\": \"Abuja\",\n  \"currentRent\": 1800000,\n  \"availableOn\": \"2026-03-15\",\n  \"features\": [\"parking\", \"balcony\", \"security\"]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/listings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "listings"
+              ]
+            },
+            "description": "Create a new ACTIVE listing for authenticated user."
+          }
+        },
+        {
+          "name": "GET /listings/me",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/listings/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "listings",
+                "me"
+              ]
+            },
+            "description": "Get all listings created by authenticated user (latest first)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Matching",
+      "item": [
+        {
+          "name": "POST /matching/run",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let data = {};",
+                  "try { data = pm.response.json(); } catch (e) {}",
+                  "if (data.chain && data.chain.id) pm.collectionVariables.set('chainId', data.chain.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/matching/run",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "matching",
+                "run"
+              ]
+            },
+            "description": "Run matching using your latest ACTIVE listing."
+          }
+        },
+        {
+          "name": "POST /matching/run/:listingId",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let data = {};",
+                  "try { data = pm.response.json(); } catch (e) {}",
+                  "if (data.chain && data.chain.id) pm.collectionVariables.set('chainId', data.chain.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/matching/run/{{listingId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "matching",
+                "run",
+                "{{listingId}}"
+              ]
+            },
+            "description": "Run matching for a specific listing ID owned by authenticated user."
+          }
+        },
+        {
+          "name": "GET /matching/chains/me",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let data = [];",
+                  "try { data = pm.response.json(); } catch (e) {}",
+                  "if (Array.isArray(data) && data.length && data[0].id) pm.collectionVariables.set('chainId', data[0].id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/matching/chains/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "matching",
+                "chains",
+                "me"
+              ]
+            },
+            "description": "Get all chains where the authenticated user is a member."
+          }
+        },
+        {
+          "name": "GET /matching/chains/:chainId",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/matching/chains/{{chainId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "matching",
+                "chains",
+                "{{chainId}}"
+              ]
+            },
+            "description": "Get detailed chain info. Phone numbers are hidden until contact unlock is fully approved by all chain members."
+          }
+        },
+        {
+          "name": "POST /matching/chains/:chainId/accept",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/matching/chains/{{chainId}}/accept",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "matching",
+                "chains",
+                "{{chainId}}",
+                "accept"
+              ]
+            },
+            "description": "Accept a chain as the authenticated member. When all members accept, chain status becomes LOCKED."
+          }
+        },
+        {
+          "name": "POST /matching/chains/:chainId/decline",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/matching/chains/{{chainId}}/decline",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "matching",
+                "chains",
+                "{{chainId}}",
+                "decline"
+              ]
+            },
+            "description": "Decline a chain as the authenticated member. Chain status becomes BROKEN."
+          }
+        },
+        {
+          "name": "POST /matching/chains/:chainId/connect",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let data = {};",
+                  "try { data = pm.response.json(); } catch (e) {}",
+                  "if (data.unlockId) pm.collectionVariables.set('unlockId', data.unlockId);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/matching/chains/{{chainId}}/connect",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "matching",
+                "chains",
+                "{{chainId}}",
+                "connect"
+              ]
+            },
+            "description": "Create a contact unlock request for a LOCKED chain. Requester auto-approves."
+          }
+        },
+        {
+          "name": "POST /matching/connect/:unlockId/approve",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/matching/connect/{{unlockId}}/approve",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "matching",
+                "connect",
+                "{{unlockId}}",
+                "approve"
+              ]
+            },
+            "description": "Approve an existing contact unlock request as a chain member."
+          }
+        }
+      ]
+    }
+  ]
+}
