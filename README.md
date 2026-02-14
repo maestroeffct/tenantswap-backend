@@ -28,6 +28,7 @@
 ## API Docs
 
 - Full endpoint documentation: `docs/api/endpoints.md`
+- Frontend integration guide: `docs/api/frontend-integration.md`
 - Postman collection: `docs/postman/TenantSwap-Backend.postman_collection.json`
 - Postman environment: `docs/postman/TenantSwap-Local.postman_environment.json`
 
