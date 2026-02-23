@@ -4,23 +4,67 @@ Base URL: `http://localhost:3000`
 
 Auth type: `Bearer <accessToken>` (JWT)
 
+## Security + Runtime Notes
+
+- Global validation: strips unknown fields and rejects non-whitelisted payload keys.
+- Global rate limit: `100 requests / 60 seconds` (default guard).
+- Auth endpoint throttles:
+  - `POST /auth/register`: `5 / 60s`
+  - `POST /auth/login`: `5 / 60s`
+  - `POST /auth/verify-email`: `10 / 60s`
+  - `POST /auth/resend-verification`: `5 / 60s`
+- Matching run throttles:
+  - `POST /matching/run`: `8 / 60s`
+  - `POST /matching/run/:listingId`: `8 / 60s`
+
+## Error Response Format
+
+All errors use the global exception envelope:
+
+```json
+{
+  "success": false,
+  "statusCode": 401,
+  "message": "Invalid credentials",
+  "timestamp": "2026-02-23T12:00:00.000Z",
+  "path": "/auth/login",
+  "meta": {
+    "attemptsAllowed": 5,
+    "attemptsUsed": 2,
+    "attemptsRemaining": 3,
+    "locked": false,
+    "lockRemainingMs": 0,
+    "lockUntil": null,
+    "windowMs": 900000
+  }
+}
+```
+
+Notes:
+- `meta` is included when available (for example login attempts/lockout).
+- Validation failures include an `errors` array.
+
 ## Quick Workflow
 
-1. `POST /auth/register` or `POST /auth/login`
-2. `POST /listings`
-3. `POST /matching/run` (or `/matching/run/:listingId`)
-4. `GET /matching/chains/me` and `GET /matching/chains/:chainId`
-5. `POST /matching/chains/:chainId/accept` (or decline)
-6. `POST /matching/chains/:chainId/connect`
-7. `POST /matching/connect/:unlockId/approve` (by all members)
+1. `POST /auth/register`
+2. `POST /auth/verify-email` (or `POST /auth/resend-verification` then verify)
+3. `POST /auth/login`
+4. `POST /listings`
+5. `POST /matching/run` (or `/matching/run/:listingId`)
+6. `GET /matching/chains/me` and `GET /matching/chains/:chainId`
+7. `POST /matching/chains/:chainId/accept` (or decline)
+8. `POST /matching/chains/:chainId/connect`
+9. `POST /matching/connect/:unlockId/approve` (by all members)
 
 ## Endpoints Summary
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | GET | `/` | No | Health/basic hello route |
-| POST | `/auth/register` | No | Register new user |
-| POST | `/auth/login` | No | Login existing user |
+| POST | `/auth/register` | No | Register user and trigger email verification |
+| POST | `/auth/verify-email` | No | Verify token and issue JWT |
+| POST | `/auth/resend-verification` | No | Resend verification for unverified email |
+| POST | `/auth/login` | No | Login with phone/password (email must be verified) |
 | GET | `/users/me` | Yes | Get current authenticated user |
 | POST | `/listings` | Yes | Create listing |
 | GET | `/listings/me` | Yes | Get all my listings |
@@ -48,38 +92,82 @@ Body:
 ```json
 {
   "fullName": "Ada Lovelace",
+  "email": "ada@example.com",
   "phone": "+2348012345678",
-  "password": "password123"
+  "password": "Password123!"
 }
 ```
 
-Response (201/200):
+Response:
 ```json
 {
-  "message": "User registered successfully",
+  "message": "If your details are valid, a verification email has been sent.",
+  "verificationToken": "<dev-only-token>"
+}
+```
+
+Notes:
+- `verificationToken` is returned only outside production.
+- Response message is generic to avoid user enumeration.
+
+### 3) POST `/auth/verify-email`
+
+Body:
+```json
+{
+  "token": "<64-char-token>"
+}
+```
+
+Response:
+```json
+{
+  "message": "Email verified successfully",
   "accessToken": "<jwt>",
   "user": {
     "id": "uuid",
     "fullName": "Ada Lovelace",
-    "phone": "+2348012345678"
+    "phone": "+2348012345678",
+    "email": "ada@example.com"
   }
 }
 ```
 
-Errors:
-- `400`: `Phone number already registered`
+Common errors:
+- `400`: `Invalid or expired verification token`
 
-### 3) POST `/auth/login`
+### 4) POST `/auth/resend-verification`
+
+Body:
+```json
+{
+  "email": "ada@example.com"
+}
+```
+
+Response:
+```json
+{
+  "message": "If the email exists, a verification email has been sent.",
+  "verificationToken": "<dev-only-token>"
+}
+```
+
+Notes:
+- Generic response is intentional.
+- `verificationToken` is dev-only.
+
+### 5) POST `/auth/login`
 
 Body:
 ```json
 {
   "phone": "+2348012345678",
-  "password": "password123"
+  "password": "Password123!"
 }
 ```
 
-Response:
+Success response:
 ```json
 {
   "message": "Login successful",
@@ -87,15 +175,18 @@ Response:
   "user": {
     "id": "uuid",
     "fullName": "Ada Lovelace",
-    "phone": "+2348012345678"
+    "phone": "+2348012345678",
+    "email": "ada@example.com"
   }
 }
 ```
 
-Errors:
-- `401`: `Invalid credentials`
+Common errors:
+- `401`: `Invalid credentials` + lockout metadata in `meta`
+- `401`: `Please verify your email before logging in`
+- `429`: `Too many attempts. Please try again later.`
 
-### 4) GET `/users/me`
+### 6) GET `/users/me`
 
 Header:
 - `Authorization: Bearer <accessToken>`
@@ -112,7 +203,7 @@ Response:
 }
 ```
 
-### 5) POST `/listings`
+### 7) POST `/listings`
 
 Header:
 - `Authorization: Bearer <accessToken>`
@@ -154,7 +245,7 @@ Response:
 }
 ```
 
-### 6) GET `/listings/me`
+### 8) GET `/listings/me`
 
 Header:
 - `Authorization: Bearer <accessToken>`
@@ -171,16 +262,18 @@ Response:
 ]
 ```
 
-### 7) POST `/matching/run`
+### 9) POST `/matching/run`
 
 Header:
 - `Authorization: Bearer <accessToken>`
 
-Response when found:
+Possible responses:
+
+Direct one-to-one found:
 ```json
 {
   "found": true,
-  "message": "Direct match found! Awaiting confirmations.",
+  "message": "Direct one-to-one match found! Awaiting confirmations.",
   "chain": {
     "id": "uuid",
     "status": "PENDING",
@@ -190,22 +283,66 @@ Response when found:
     "avgScore": 87,
     "members": []
   },
-  "badge": "DIRECT"
-}
-```
-
-Response when none:
-```json
-{
-  "found": false,
-  "message": "No chain found yet.",
-  "aiSuggestions": [
-    "Increase your budget range by 10-20% to unlock more matches."
+  "badge": "DIRECT",
+  "matchScenario": "ONE_TO_ONE",
+  "recommendations": [
+    {
+      "listingId": "uuid",
+      "relationship": "ONE_TO_ONE",
+      "score": 72,
+      "rankScore": 87,
+      "breakdown": {
+        "location": 30,
+        "apartmentType": 30,
+        "budget": 20,
+        "timeline": 5,
+        "features": 2,
+        "reciprocityBonus": 15
+      }
+    }
   ]
 }
 ```
 
-### 8) POST `/matching/run/:listingId`
+One-to-many recommendations (no chain yet):
+```json
+{
+  "found": false,
+  "message": "No one-to-one chain found yet. Showing top one-way matches for this listing.",
+  "matchScenario": "ONE_TO_MANY",
+  "recommendations": [
+    {
+      "listingId": "uuid",
+      "relationship": "ONE_WAY",
+      "score": 61,
+      "rankScore": 61,
+      "breakdown": {
+        "location": 15,
+        "apartmentType": 30,
+        "budget": 12,
+        "timeline": 2,
+        "features": 2,
+        "reciprocityBonus": 0
+      }
+    }
+  ]
+}
+```
+
+Independent (no compatible candidates):
+```json
+{
+  "found": false,
+  "message": "No compatible recommendation yet. This listing is currently independent.",
+  "matchScenario": "INDEPENDENT",
+  "recommendations": [],
+  "aiSuggestions": [
+    "Increase your budget range by 10–20% to unlock more matches."
+  ]
+}
+```
+
+### 10) POST `/matching/run/:listingId`
 
 Header:
 - `Authorization: Bearer <accessToken>`
@@ -213,9 +350,9 @@ Header:
 Path params:
 - `listingId`: target listing ID (must belong to authenticated user)
 
-Response shape is same as `/matching/run`.
+Response shape is the same as `/matching/run`.
 
-### 9) GET `/matching/chains/me`
+### 11) GET `/matching/chains/me`
 
 Header:
 - `Authorization: Bearer <accessToken>`
@@ -235,7 +372,7 @@ Response:
 ]
 ```
 
-### 10) GET `/matching/chains/:chainId`
+### 12) GET `/matching/chains/:chainId`
 
 Header:
 - `Authorization: Bearer <accessToken>`
@@ -269,10 +406,10 @@ Response:
 }
 ```
 
-Notes:
+Note:
 - `phone` stays `null` until all chain members approve contact unlock.
 
-### 11) POST `/matching/chains/:chainId/accept`
+### 13) POST `/matching/chains/:chainId/accept`
 
 Header:
 - `Authorization: Bearer <accessToken>`
@@ -285,7 +422,7 @@ Response:
 }
 ```
 
-### 12) POST `/matching/chains/:chainId/decline`
+### 14) POST `/matching/chains/:chainId/decline`
 
 Header:
 - `Authorization: Bearer <accessToken>`
@@ -297,7 +434,7 @@ Response:
 }
 ```
 
-### 13) POST `/matching/chains/:chainId/connect`
+### 15) POST `/matching/chains/:chainId/connect`
 
 Header:
 - `Authorization: Bearer <accessToken>`
@@ -314,7 +451,7 @@ Response:
 }
 ```
 
-### 14) POST `/matching/connect/:unlockId/approve`
+### 16) POST `/matching/connect/:unlockId/approve`
 
 Header:
 - `Authorization: Bearer <accessToken>`
@@ -336,5 +473,7 @@ Response:
 1. Import `docs/postman/TenantSwap-Backend.postman_collection.json`
 2. Import `docs/postman/TenantSwap-Local.postman_environment.json`
 3. Select environment `TenantSwap Local`
-4. Run `Auth -> Register` or `Auth -> Login` (token auto-saved)
-5. Continue with other endpoints
+4. Run `Auth -> POST /auth/register`
+5. Run `Auth -> POST /auth/verify-email` (or resend + verify)
+6. Run `Auth -> POST /auth/login`
+7. Continue with listing/matching endpoints

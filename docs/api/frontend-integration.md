@@ -6,15 +6,17 @@ Auth: JWT Bearer token in `Authorization: Bearer <accessToken>`
 
 ## 1) Core Flow For Frontend
 
-1. Register/Login and store `accessToken`
-2. Create listing
-3. Run matching
-4. Show chains list
-5. Open chain detail
-6. Accept or decline chain
-7. If chain becomes `LOCKED`, request contact unlock
-8. Each member approves unlock
-9. Refetch chain detail until `contactUnlocked = true`
+1. Register
+2. Verify email (or resend verification then verify)
+3. Login and store `accessToken`
+4. Create listing
+5. Run matching
+6. Show chains list
+7. Open chain detail
+8. Accept or decline chain
+9. If chain becomes `LOCKED`, request contact unlock
+10. Each member approves unlock
+11. Refetch chain detail until `contactUnlocked = true`
 
 ## 2) Auth Contract
 
@@ -23,21 +25,55 @@ Request:
 ```json
 {
   "fullName": "Ada Lovelace",
+  "email": "ada@example.com",
   "phone": "+2348012345678",
-  "password": "password123"
+  "password": "Password123!"
 }
 ```
 
 Response:
 ```json
 {
-  "message": "User registered successfully",
+  "message": "If your details are valid, a verification email has been sent.",
+  "verificationToken": "<dev-only-token>"
+}
+```
+
+### POST `/auth/verify-email`
+Request:
+```json
+{
+  "token": "<64-char-token>"
+}
+```
+
+Response:
+```json
+{
+  "message": "Email verified successfully",
   "accessToken": "jwt",
   "user": {
     "id": "uuid",
     "fullName": "Ada Lovelace",
-    "phone": "+2348012345678"
+    "phone": "+2348012345678",
+    "email": "ada@example.com"
   }
+}
+```
+
+### POST `/auth/resend-verification`
+Request:
+```json
+{
+  "email": "ada@example.com"
+}
+```
+
+Response:
+```json
+{
+  "message": "If the email exists, a verification email has been sent.",
+  "verificationToken": "<dev-only-token>"
 }
 ```
 
@@ -46,11 +82,23 @@ Request:
 ```json
 {
   "phone": "+2348012345678",
-  "password": "password123"
+  "password": "Password123!"
 }
 ```
 
-Response shape is same as register.
+Response:
+```json
+{
+  "message": "Login successful",
+  "accessToken": "jwt",
+  "user": {
+    "id": "uuid",
+    "fullName": "Ada Lovelace",
+    "phone": "+2348012345678",
+    "email": "ada@example.com"
+  }
+}
+```
 
 ## 3) Listing Contract
 
@@ -97,12 +145,13 @@ Response:
 
 ### POST `/matching/run` or `/matching/run/:listingId`
 
-Success (match found):
+One-to-one found:
 ```json
 {
   "found": true,
-  "message": "Direct match found! Awaiting confirmations.",
+  "message": "Direct one-to-one match found! Awaiting confirmations.",
   "badge": "DIRECT",
+  "matchScenario": "ONE_TO_ONE",
   "chain": {
     "id": "uuid",
     "status": "PENDING",
@@ -111,18 +160,44 @@ Success (match found):
     "cycleSize": 2,
     "avgScore": 87,
     "members": []
-  }
+  },
+  "recommendations": []
 }
 ```
 
-No match:
+No chain yet (ranked one-way candidates):
 ```json
 {
   "found": false,
-  "message": "No chain found yet.",
-  "aiSuggestions": [
-    "Increase your budget range by 10-20% to unlock more matches."
+  "message": "No one-to-one chain found yet. Showing top one-way matches for this listing.",
+  "matchScenario": "ONE_TO_MANY",
+  "recommendations": [
+    {
+      "listingId": "uuid",
+      "relationship": "ONE_WAY",
+      "score": 61,
+      "rankScore": 61,
+      "breakdown": {
+        "location": 15,
+        "apartmentType": 30,
+        "budget": 12,
+        "timeline": 2,
+        "features": 2,
+        "reciprocityBonus": 0
+      }
+    }
   ]
+}
+```
+
+No compatible recommendation:
+```json
+{
+  "found": false,
+  "message": "No compatible recommendation yet. This listing is currently independent.",
+  "matchScenario": "INDEPENDENT",
+  "recommendations": [],
+  "aiSuggestions": ["..."]
 }
 ```
 
@@ -131,32 +206,6 @@ Use this for chain list page.
 
 ### GET `/matching/chains/:chainId`
 Use this for chain detail page.
-
-Response:
-```json
-{
-  "id": "uuid",
-  "cycleSize": 2,
-  "avgScore": 87,
-  "status": "LOCKED",
-  "type": "DIRECT",
-  "cycleHash": "...",
-  "contactUnlocked": false,
-  "members": [
-    {
-      "listingId": "uuid",
-      "position": 0,
-      "hasAccepted": true,
-      "fullName": "Ada Lovelace",
-      "phone": null,
-      "currentCity": "Abuja",
-      "currentType": "1-Bedroom Apartment",
-      "currentRent": 1800000,
-      "desiredCity": "Lagos"
-    }
-  ]
-}
-```
 
 Important:
 - `phone` is `null` until contact unlock approvals are complete.
@@ -198,62 +247,48 @@ Response:
 }
 ```
 
-## 5) Recommended UI State Rules
+## 5) Error Shape
 
-- Chain card status color mapping:
-  - `PENDING`: warning/amber
-  - `LOCKED`: success/green
-  - `BROKEN`: error/red
-- Show `Accept` and `Decline` buttons only if user is chain member and status is `PENDING`.
-- Show `Connect` button only when status is `LOCKED`.
-- Poll/refetch chain detail after accept/decline/connect/approve.
+All errors are normalized:
 
-## 6) Error Shape (Nest default)
-
-Most failures come as:
 ```json
 {
+  "success": false,
   "statusCode": 400,
-  "message": "You are not a member of this chain",
-  "error": "Bad Request"
+  "message": "Request failed",
+  "timestamp": "2026-02-23T12:00:00.000Z",
+  "path": "/some-path"
 }
 ```
 
-Handle at least:
-- `400` invalid flow/business rule
-- `401` missing or invalid token
+Login failures/lockouts may include a `meta` object with attempts and lock info.
 
-## 7) Suggested Frontend Types (TypeScript)
+## 6) Suggested Frontend Types (TypeScript)
 
 ```ts
 export type ChainStatus = 'PENDING' | 'LOCKED' | 'BROKEN';
 export type ChainType = 'DIRECT' | 'CIRCULAR';
+export type MatchScenario = 'ONE_TO_ONE' | 'ONE_TO_MANY' | 'INDEPENDENT';
 
-export interface ChainMemberDetail {
-  listingId: string;
-  position: number;
-  hasAccepted: boolean;
-  fullName: string | null;
-  phone: string | null;
-  currentCity: string | null;
-  currentType: string | null;
-  currentRent: number | null;
-  desiredCity: string | null;
+export interface RecommendationBreakdown {
+  location: number;
+  apartmentType: number;
+  budget: number;
+  timeline: number;
+  features: number;
+  reciprocityBonus: number;
 }
 
-export interface ChainDetail {
-  id: string;
-  cycleSize: number;
-  avgScore: number;
-  status: ChainStatus;
-  type: ChainType;
-  cycleHash: string;
-  contactUnlocked: boolean;
-  members: ChainMemberDetail[];
+export interface MatchRecommendation {
+  listingId: string;
+  relationship: 'ONE_TO_ONE' | 'ONE_WAY';
+  score: number;
+  rankScore: number;
+  breakdown: RecommendationBreakdown;
 }
 ```
 
-## 8) Hand-off Files
+## 7) Hand-off Files
 
 - Full API reference: `docs/api/endpoints.md`
 - Postman collection: `docs/postman/TenantSwap-Backend.postman_collection.json`

@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "TenantSwap Backend API",
-    "description": "Complete API collection for TenantSwap backend.\n\nWorkflow:\n1. Register or Login\n2. Create Listings\n3. Run Matching\n4. Accept/Decline Chain\n5. Unlock Contacts",
+    "description": "Complete API collection for TenantSwap backend.\n\nWorkflow:\n1. Register\n2. Verify email (or resend + verify)\n3. Login\n4. Create listing\n5. Run matching\n6. Accept/Decline chain\n7. Unlock contacts",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -21,6 +21,22 @@
     },
     {
       "key": "accessToken",
+      "value": ""
+    },
+    {
+      "key": "email",
+      "value": "ada@example.com"
+    },
+    {
+      "key": "phone",
+      "value": "+2348012345678"
+    },
+    {
+      "key": "password",
+      "value": "Password123!"
+    },
+    {
+      "key": "verificationToken",
       "value": ""
     },
     {
@@ -73,6 +89,7 @@
                 "exec": [
                   "let data = {};",
                   "try { data = pm.response.json(); } catch (e) {}",
+                  "if (data.verificationToken) pm.collectionVariables.set('verificationToken', data.verificationToken);",
                   "if (data.accessToken) pm.collectionVariables.set('accessToken', data.accessToken);"
                 ]
               }
@@ -89,10 +106,6 @@
                 "value": "application/json"
               }
             ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"fullName\": \"Ada Lovelace\",\n  \"phone\": \"+2348012345678\",\n  \"password\": \"password123\"\n}"
-            },
             "url": {
               "raw": "{{baseUrl}}/auth/register",
               "host": [
@@ -103,7 +116,97 @@
                 "register"
               ]
             },
-            "description": "Register a new user and return JWT access token."
+            "description": "Register a new user. Returns a generic message and verification token in non-production environments.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Ada Lovelace\",\n  \"email\": \"{{email}}\",\n  \"phone\": \"{{phone}}\",\n  \"password\": \"{{password}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "POST /auth/verify-email",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let data = {};",
+                  "try { data = pm.response.json(); } catch (e) {}",
+                  "if (data.accessToken) pm.collectionVariables.set('accessToken', data.accessToken);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/verify-email",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "verify-email"
+              ]
+            },
+            "description": "Verify email with the token from register/resend and return JWT access token.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{verificationToken}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "POST /auth/resend-verification",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let data = {};",
+                  "try { data = pm.response.json(); } catch (e) {}",
+                  "if (data.verificationToken) pm.collectionVariables.set('verificationToken', data.verificationToken);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/resend-verification",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "resend-verification"
+              ]
+            },
+            "description": "Request a new verification email for an unverified account. Generic response to prevent enumeration.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\"\n}"
+            }
           }
         },
         {
@@ -132,10 +235,6 @@
                 "value": "application/json"
               }
             ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"phone\": \"+2348012345678\",\n  \"password\": \"password123\"\n}"
-            },
             "url": {
               "raw": "{{baseUrl}}/auth/login",
               "host": [
@@ -146,7 +245,11 @@
                 "login"
               ]
             },
-            "description": "Login with phone/password and return JWT access token."
+            "description": "Login with phone/password. Fails if email is not verified.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"{{phone}}\",\n  \"password\": \"{{password}}\"\n}"
+            }
           }
         }
       ]

@@ -1,10 +1,4 @@
-import {
-  IsString,
-  IsNotEmpty,
-  IsInt,
-  IsDateString,
-  IsArray,
-} from 'class-validator';
+import { IsString, IsInt, IsDateString, IsArray } from 'class-validator';
 
 export class CreateListingDto {
   // LOOKING FOR

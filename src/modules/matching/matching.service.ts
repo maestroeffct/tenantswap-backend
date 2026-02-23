@@ -9,6 +9,10 @@ type Edge = {
   typeScore: number;
   budgetScore: number;
   timelineScore: number;
+  featureScore: number;
+  reciprocityBonus: number;
+  rankScore: number;
+  isMutual: boolean;
   totalScore: number;
 };
 
@@ -23,7 +27,41 @@ type ListingNode = {
   currentType: string;
   currentRent: number;
   availableOn: Date;
+  features: string[];
 };
+
+type ChainCreateOutcome =
+  | {
+      created: true;
+      chainType: 'DIRECT' | 'CIRCULAR';
+      chain: {
+        id: string;
+        status: 'PENDING' | 'LOCKED' | 'BROKEN';
+        type: 'DIRECT' | 'CIRCULAR';
+        cycleSize: number;
+        avgScore: number;
+        cycleHash: string;
+        createdAt: Date;
+        members: {
+          id: string;
+          chainId: string;
+          listingId: string;
+          userId: string;
+          position: number;
+          hasAccepted: boolean;
+        }[];
+      };
+    }
+  | {
+      created: false;
+      reason: 'exists';
+      chainId: string;
+      status: 'PENDING' | 'LOCKED' | 'BROKEN';
+    }
+  | {
+      created: false;
+      reason: 'lockedConflict';
+    };
 
 @Injectable()
 export class MatchingService {
@@ -34,66 +72,143 @@ export class MatchingService {
 
   /* ---------------------------- scoring ---------------------------- */
 
+  private normalize(value: string) {
+    return value.trim().toLowerCase();
+  }
+
+  private computeLocationScore(desiredCity: string, currentCity: string) {
+    const desired = this.normalize(desiredCity);
+    const current = this.normalize(currentCity);
+
+    if (desired === current) return 30;
+
+    const desiredTokens = desired.split(/[,\-/\s]+/).filter(Boolean);
+    const currentTokens = new Set(current.split(/[,\-/\s]+/).filter(Boolean));
+    const shareToken = desiredTokens.some((token) => currentTokens.has(token));
+
+    return shareToken ? 15 : 0;
+  }
+
+  private computeTypeScore(desiredType: string, currentType: string) {
+    const desired = this.normalize(desiredType);
+    const current = this.normalize(currentType);
+
+    if (desired === current) return 30;
+    if (desired.includes(current) || current.includes(desired)) return 15;
+
+    return 0;
+  }
+
+  private computeBudgetScore(maxBudget: number, currentRent: number) {
+    if (maxBudget <= 0 || currentRent <= 0) return 0;
+    if (maxBudget < currentRent) return 0;
+
+    const ratio = currentRent / maxBudget; // 0..1
+    const score = Math.round(25 * (1 - ratio));
+    return Math.max(0, Math.min(25, score));
+  }
+
   private computeTimelineScore(a: ListingNode, b: ListingNode) {
     const diffDays = Math.abs(
       (new Date(a.availableOn).getTime() - new Date(b.availableOn).getTime()) /
         (1000 * 60 * 60 * 24),
     );
 
-    if (diffDays <= 30) return 30;
-    if (diffDays <= 60) return 20;
-    if (diffDays <= 90) return 10;
+    if (diffDays <= 14) return 10;
+    if (diffDays <= 30) return 8;
+    if (diffDays <= 60) return 5;
+    if (diffDays <= 90) return 2;
     return 0;
   }
 
-  private computeScore(a: ListingNode, b: ListingNode) {
-    const cityScore = a.desiredCity === b.currentCity ? 30 : 0;
-    const typeScore = a.desiredType === b.currentType ? 20 : 0;
+  private computeFeatureScore(a: ListingNode, b: ListingNode) {
+    if (a.features.length === 0 || b.features.length === 0) return 0;
 
-    let budgetScore = 0;
-    if (a.maxBudget >= b.currentRent && a.maxBudget > 0) {
-      const ratio = b.currentRent / a.maxBudget; // 0..1
-      budgetScore = Math.round(30 * (1 - ratio));
-      if (budgetScore < 0) budgetScore = 0;
+    const aFeatures = new Set(
+      a.features.map((feature) => this.normalize(feature)),
+    );
+    const bFeatures = new Set(
+      b.features.map((feature) => this.normalize(feature)),
+    );
+
+    let overlap = 0;
+    for (const feature of aFeatures) {
+      if (bFeatures.has(feature)) {
+        overlap += 1;
+      }
     }
 
-    const timelineScore = this.computeTimelineScore(a, b);
+    const denominator = Math.max(aFeatures.size, bFeatures.size);
+    if (denominator === 0) return 0;
 
-    const totalScore = cityScore + typeScore + budgetScore + timelineScore;
+    const ratio = overlap / denominator;
+    return Math.round(5 * ratio);
+  }
+
+  private computeScore(a: ListingNode, b: ListingNode) {
+    const cityScore = this.computeLocationScore(a.desiredCity, b.currentCity);
+    const typeScore = this.computeTypeScore(a.desiredType, b.currentType);
+    const budgetScore = this.computeBudgetScore(a.maxBudget, b.currentRent);
+    const timelineScore = this.computeTimelineScore(a, b);
+    const featureScore = this.computeFeatureScore(a, b);
+
+    const totalScore =
+      cityScore + typeScore + budgetScore + timelineScore + featureScore;
 
     return {
       cityScore,
       typeScore,
       budgetScore,
       timelineScore,
+      featureScore,
+      reciprocityBonus: 0,
+      rankScore: Math.min(100, totalScore),
+      isMutual: false,
       totalScore: Math.min(100, totalScore),
     };
+  }
+
+  private isEdgeCompatible(a: ListingNode, b: ListingNode) {
+    const typeScore = this.computeTypeScore(a.desiredType, b.currentType);
+    if (typeScore === 0) return false;
+
+    return a.maxBudget >= b.currentRent;
   }
 
   /* ---------------------------- graph ---------------------------- */
 
   private buildGraph(listings: ListingNode[]) {
     const graph = new Map<string, Edge[]>();
+    const lookup = new Map<string, Edge>();
 
     for (const a of listings) {
       const edges: Edge[] = [];
 
       for (const b of listings) {
         if (a.id === b.id) continue;
-
-        // MVP strict compatibility (edge existence)
-        const ok =
-          a.desiredCity === b.currentCity &&
-          a.desiredType === b.currentType &&
-          a.maxBudget >= b.currentRent;
-
-        if (!ok) continue;
+        if (!this.isEdgeCompatible(a, b)) continue;
 
         const scoreData = this.computeScore(a, b);
-        edges.push({ to: b.id, ...scoreData });
+        const edge = { to: b.id, ...scoreData };
+
+        edges.push(edge);
+        lookup.set(`${a.id}->${b.id}`, edge);
       }
 
+      edges.sort((left, right) => right.totalScore - left.totalScore);
       graph.set(a.id, edges);
+    }
+
+    // Reciprocity gets additional weight because it can produce direct swaps.
+    for (const [fromId, edges] of graph.entries()) {
+      for (const edge of edges) {
+        const reverse = lookup.get(`${edge.to}->${fromId}`);
+        if (!reverse) continue;
+
+        edge.isMutual = true;
+        edge.reciprocityBonus = 15;
+        edge.rankScore = edge.totalScore + edge.reciprocityBonus;
+      }
     }
 
     return graph;
@@ -111,10 +226,9 @@ export class MatchingService {
     const dfs = (current: string) => {
       const edges = graph.get(current) ?? [];
 
-      for (const e of edges) {
-        const next = e.to;
+      for (const edge of edges) {
+        const next = edge.to;
 
-        // ✅ allow DIRECT match (2-way) + circular (3/4)
         if (next === startId && path.length >= 2 && path.length <= maxLen) {
           cycles.push([...path]);
           continue;
@@ -142,17 +256,151 @@ export class MatchingService {
       for (let i = 0; i < cycle.length; i++) {
         const from = cycle[i];
         const to = i === cycle.length - 1 ? cycle[0] : cycle[i + 1];
-        const edge = (graph.get(from) ?? []).find((x) => x.to === to);
-        total += edge?.totalScore ?? 0;
+        const edge = this.getEdge(graph, from, to);
+
+        total += edge?.rankScore ?? edge?.totalScore ?? 0;
       }
 
       const avg = Math.round(total / cycle.length);
       return { cycle, avg };
     });
 
-    // prefer higher avg
-    scored.sort((a, b) => b.avg - a.avg);
+    scored.sort((left, right) => right.avg - left.avg);
     return scored[0] ?? null;
+  }
+
+  private getEdge(graph: Map<string, Edge[]>, fromId: string, toId: string) {
+    return (graph.get(fromId) ?? []).find((edge) => edge.to === toId);
+  }
+
+  private pickBestDirectPair(listingId: string, graph: Map<string, Edge[]>) {
+    const myEdges = graph.get(listingId) ?? [];
+
+    const directCandidates = myEdges
+      .filter((edge) => edge.isMutual)
+      .map((edge) => {
+        const reverse = this.getEdge(graph, edge.to, listingId);
+        if (!reverse) return null;
+
+        const avg = Math.round((edge.rankScore + reverse.rankScore) / 2);
+        return { peerId: edge.to, avg };
+      })
+      .filter((candidate): candidate is { peerId: string; avg: number } =>
+        Boolean(candidate),
+      )
+      .sort((left, right) => right.avg - left.avg);
+
+    return directCandidates[0] ?? null;
+  }
+
+  private buildRecommendations(
+    listingId: string,
+    graph: Map<string, Edge[]>,
+    listingById: Map<string, ListingNode>,
+    limit = 8,
+  ) {
+    const candidates = [...(graph.get(listingId) ?? [])]
+      .sort((left, right) => right.rankScore - left.rankScore)
+      .slice(0, limit);
+
+    return candidates.map((candidate) => {
+      const target = listingById.get(candidate.to);
+
+      return {
+        listingId: candidate.to,
+        userId: target?.userId ?? null,
+        currentCity: target?.currentCity ?? null,
+        currentType: target?.currentType ?? null,
+        currentRent: target?.currentRent ?? null,
+        availableOn: target?.availableOn ?? null,
+        features: target?.features ?? [],
+        relationship: candidate.isMutual ? 'ONE_TO_ONE' : 'ONE_WAY',
+        score: candidate.totalScore,
+        rankScore: candidate.rankScore,
+        breakdown: {
+          location: candidate.cityScore,
+          apartmentType: candidate.typeScore,
+          budget: candidate.budgetScore,
+          timeline: candidate.timelineScore,
+          features: candidate.featureScore,
+          reciprocityBonus: candidate.reciprocityBonus,
+        },
+      };
+    });
+  }
+
+  private async createChainFromCycle(
+    cycle: string[],
+    avg: number,
+    listings: ListingNode[],
+  ): Promise<ChainCreateOutcome> {
+    const canonical = [...cycle].sort().join('-');
+
+    const existingChain = await this.prisma.swapChain.findUnique({
+      where: { cycleHash: canonical },
+      select: { id: true, status: true },
+    });
+
+    if (existingChain) {
+      return {
+        created: false,
+        reason: 'exists',
+        chainId: existingChain.id,
+        status: existingChain.status,
+      };
+    }
+
+    const existingMembers = await this.prisma.swapChainMember.findMany({
+      where: { listingId: { in: cycle }, chain: { status: 'LOCKED' } },
+      select: { listingId: true, chainId: true },
+    });
+
+    if (existingMembers.length > 0) {
+      return {
+        created: false,
+        reason: 'lockedConflict',
+      };
+    }
+
+    const chainType = cycle.length === 2 ? 'DIRECT' : 'CIRCULAR';
+    const listingById = new Map(
+      listings.map((item) => [item.id, item] as const),
+    );
+
+    const chain = await this.prisma.swapChain.create({
+      data: {
+        cycleSize: cycle.length,
+        avgScore: avg,
+        status: 'PENDING',
+        type: chainType,
+        cycleHash: canonical,
+        members: {
+          create: cycle.map((id, index) => {
+            const listing = listingById.get(id);
+
+            if (!listing) {
+              throw new BadRequestException(
+                `Listing ${id} was not found in active listing set`,
+              );
+            }
+
+            return {
+              listingId: id,
+              userId: listing.userId,
+              position: index,
+              hasAccepted: false,
+            };
+          }),
+        },
+      },
+      include: { members: true },
+    });
+
+    return {
+      created: true,
+      chainType,
+      chain,
+    };
   }
 
   /* ---------------------------- public API ---------------------------- */
@@ -187,6 +435,7 @@ export class MatchingService {
         currentType: true,
         currentRent: true,
         availableOn: true,
+        features: true,
       },
     });
 
@@ -201,7 +450,6 @@ export class MatchingService {
       throw new BadRequestException('Listing must be ACTIVE to run matching');
     }
 
-    // Pull all ACTIVE listings
     const listings = await this.prisma.swapListing.findMany({
       where: { status: 'ACTIVE' },
       select: {
@@ -215,49 +463,110 @@ export class MatchingService {
         currentType: true,
         currentRent: true,
         availableOn: true,
+        features: true,
       },
     });
 
     const graph = this.buildGraph(listings);
+    const listingById = new Map(
+      listings.map((item) => [item.id, item] as const),
+    );
 
-    // store candidates
     const edgeWrites: Prisma.PrismaPromise<unknown>[] = [];
     for (const [fromId, edges] of graph.entries()) {
-      for (const e of edges) {
+      for (const edge of edges) {
         edgeWrites.push(
           this.prisma.matchCandidate.upsert({
             where: {
               fromListingId_toListingId: {
                 fromListingId: fromId,
-                toListingId: e.to,
+                toListingId: edge.to,
               },
             },
             update: {
-              cityScore: e.cityScore,
-              typeScore: e.typeScore,
-              budgetScore: e.budgetScore,
-              timelineScore: e.timelineScore,
-              totalScore: e.totalScore,
+              cityScore: edge.cityScore,
+              typeScore: edge.typeScore,
+              budgetScore: edge.budgetScore,
+              timelineScore: edge.timelineScore,
+              totalScore: edge.totalScore,
             },
             create: {
               fromListingId: fromId,
-              toListingId: e.to,
-              cityScore: e.cityScore,
-              typeScore: e.typeScore,
-              budgetScore: e.budgetScore,
-              timelineScore: e.timelineScore,
-              totalScore: e.totalScore,
+              toListingId: edge.to,
+              cityScore: edge.cityScore,
+              typeScore: edge.typeScore,
+              budgetScore: edge.budgetScore,
+              timelineScore: edge.timelineScore,
+              totalScore: edge.totalScore,
             },
           }),
         );
       }
     }
-    if (edgeWrites.length) await this.prisma.$transaction(edgeWrites);
+    if (edgeWrites.length > 0) {
+      await this.prisma.$transaction(edgeWrites);
+    }
 
-    // find cycles from current listing (2..4)
-    const cycles = this.findCyclesFrom(listingId, graph, 4);
+    const recommendations = this.buildRecommendations(
+      listingId,
+      graph,
+      listingById,
+    );
+    const bestDirect = this.pickBestDirectPair(listingId, graph);
+
+    if (bestDirect) {
+      const directOutcome = await this.createChainFromCycle(
+        [listingId, bestDirect.peerId],
+        bestDirect.avg,
+        listings,
+      );
+
+      if (directOutcome.created) {
+        return {
+          found: true,
+          message: 'Direct one-to-one match found! Awaiting confirmations.',
+          chain: directOutcome.chain,
+          badge: directOutcome.chainType,
+          recommendations,
+          matchScenario: 'ONE_TO_ONE',
+        };
+      }
+
+      if (directOutcome.reason === 'exists') {
+        return {
+          found: false,
+          message: 'This direct chain already exists.',
+          chainId: directOutcome.chainId,
+          status: directOutcome.status,
+          recommendations,
+          matchScenario: 'ONE_TO_MANY',
+        };
+      }
+
+      return {
+        found: false,
+        message:
+          'A direct match exists but one or more listings are currently locked in another chain.',
+        recommendations,
+        matchScenario: 'ONE_TO_MANY',
+      };
+    }
+
+    const cycles = this.findCyclesFrom(listingId, graph, 4).filter(
+      (cycle) => cycle.length >= 3,
+    );
 
     if (cycles.length === 0) {
+      if (recommendations.length > 0) {
+        return {
+          found: false,
+          message:
+            'No one-to-one chain found yet. Showing top one-way matches for this listing.',
+          recommendations,
+          matchScenario: 'ONE_TO_MANY',
+        };
+      }
+
       const tips = this.aiService.suggestNoMatch({
         desiredCity: listing.desiredCity,
         desiredType: listing.desiredType,
@@ -267,97 +576,71 @@ export class MatchingService {
 
       return {
         found: false,
-        message: 'No chain found yet.',
+        message:
+          'No compatible recommendation yet. This listing is currently independent.',
         aiSuggestions: tips,
+        recommendations,
+        matchScenario: 'INDEPENDENT',
       };
     }
 
-    // prefer smaller cycle first (2-way direct match, then 3, then 4)
-    cycles.sort((a, b) => a.length - b.length);
+    cycles.sort((left, right) => left.length - right.length);
     const shortestLen = cycles[0].length;
-    const shortestGroup = cycles.filter((c) => c.length === shortestLen);
+    const shortestGroup = cycles.filter(
+      (cycle) => cycle.length === shortestLen,
+    );
 
-    const best = this.pickBestCycle(shortestGroup, graph);
-    if (!best) {
+    const bestCycle = this.pickBestCycle(shortestGroup, graph);
+    if (!bestCycle) {
       return {
         found: false,
         message: 'Cycle detection returned no best cycle.',
+        recommendations,
       };
     }
 
-    const { cycle, avg } = best;
+    const cycleOutcome = await this.createChainFromCycle(
+      bestCycle.cycle,
+      bestCycle.avg,
+      listings,
+    );
 
-    // ✅ canonical hash prevents mirrored duplicates
-    const canonical = [...cycle].sort().join('-');
-
-    const existingChain = await this.prisma.swapChain.findUnique({
-      where: { cycleHash: canonical },
-      select: { id: true, status: true },
-    });
-
-    if (existingChain) {
+    if (!cycleOutcome.created && cycleOutcome.reason === 'exists') {
       return {
         found: false,
         message: 'This chain already exists.',
-        chainId: existingChain.id,
-        status: existingChain.status,
+        chainId: cycleOutcome.chainId,
+        status: cycleOutcome.status,
+        recommendations,
+        matchScenario: 'ONE_TO_MANY',
       };
     }
 
-    // prevent locking conflicts (any listing already in LOCKED chain)
-    const existingMembers = await this.prisma.swapChainMember.findMany({
-      where: { listingId: { in: cycle }, chain: { status: 'LOCKED' } },
-      select: { listingId: true, chainId: true },
-    });
-
-    if (existingMembers.length > 0) {
+    if (!cycleOutcome.created && cycleOutcome.reason === 'lockedConflict') {
       return {
         found: false,
         message:
           'A potential chain exists but one or more listings are already locked in another chain.',
+        recommendations,
+        matchScenario: 'ONE_TO_MANY',
       };
     }
 
-    const chainType = cycle.length === 2 ? 'DIRECT' : 'CIRCULAR';
-
-    const listingById = new Map(listings.map((x) => [x.id, x] as const));
-
-    // Create chain (PENDING) + members (hasAccepted false)
-    const chain = await this.prisma.swapChain.create({
-      data: {
-        cycleSize: cycle.length,
-        avgScore: avg,
-        status: 'PENDING',
-        type: chainType,
-        cycleHash: canonical,
-        members: {
-          create: cycle.map((id, index) => {
-            const u = listingById.get(id);
-            if (!u) {
-              throw new BadRequestException(
-                `Listing ${id} was not found in active listing set`,
-              );
-            }
-            return {
-              listingId: id,
-              userId: u.userId,
-              position: index,
-              hasAccepted: false,
-            };
-          }),
-        },
-      },
-      include: { members: true },
-    });
+    if (!cycleOutcome.created) {
+      return {
+        found: false,
+        message: 'Could not create a chain for this cycle.',
+        recommendations,
+      };
+    }
 
     return {
       found: true,
-      message:
-        chainType === 'DIRECT'
-          ? 'Direct match found! Awaiting confirmations.'
-          : 'Circular chain found! Awaiting confirmations.',
-      chain,
-      badge: chainType, // frontend shows Direct Match badge if DIRECT
+      message: 'Circular chain found! Awaiting confirmations.',
+      chain: cycleOutcome.chain,
+      badge: cycleOutcome.chainType,
+      recommendations,
+      matchScenario: 'ONE_TO_MANY',
     };
   }
 
