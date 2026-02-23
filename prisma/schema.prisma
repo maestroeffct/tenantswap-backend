@@ -8,17 +8,23 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(uuid())
-  fullName  String
-  phone     String   @unique
-  password  String
-  createdAt DateTime @default(now())
+  id                           String   @id @default(uuid())
+  fullName                     String
+  email                        String?  @unique
+  phone                        String   @unique
+  password                     String
+  emailVerifiedAt              DateTime?
+  emailVerificationTokenHash   String?
+  emailVerificationExpiresAt   DateTime?
+  createdAt                    DateTime @default(now())
 
-  listings  SwapListing[]
+  listings                     SwapListing[]
+
+  @@index([emailVerificationTokenHash])
 }
 
 model SwapListing {
-  id        String   @id @default(uuid())
+  id        String        @id @default(uuid())
   userId    String
   status    ListingStatus @default(DRAFT)
 
@@ -59,7 +65,7 @@ enum ChainType {
 }
 
 model MatchCandidate {
-  id        String   @id @default(uuid())
+  id String @id @default(uuid())
 
   fromListingId String
   toListingId   String
@@ -76,19 +82,19 @@ model MatchCandidate {
 }
 
 model SwapChain {
-  id        String      @id @default(uuid())
-  status    ChainStatus @default(PENDING)
-  type      ChainType   @default(CIRCULAR)
+  id     String      @id @default(uuid())
+  status ChainStatus @default(PENDING)
+  type   ChainType   @default(CIRCULAR)
 
   cycleSize Int
   avgScore  Int
 
   // prevents mirrored duplicates
-  cycleHash String      @unique
+  cycleHash String @unique
 
-  createdAt DateTime    @default(now())
+  createdAt DateTime @default(now())
 
-  members   SwapChainMember[]
+  members        SwapChainMember[]
   contactUnlocks ContactUnlock[]
 }
 
@@ -108,10 +114,10 @@ model SwapChainMember {
 }
 
 model ContactUnlock {
-  id        String @id @default(uuid())
-  chainId   String
+  id              String   @id @default(uuid())
+  chainId         String
   requesterUserId String
-  createdAt DateTime @default(now())
+  createdAt       DateTime @default(now())
 
   approvals ContactUnlockApproval[]
 
@@ -121,10 +127,10 @@ model ContactUnlock {
 }
 
 model ContactUnlockApproval {
-  id            String @id @default(uuid())
+  id             String   @id @default(uuid())
   contactUnlockId String
   approverUserId  String
-  approved        Boolean @default(true)
+  approved        Boolean  @default(true)
   createdAt       DateTime @default(now())
 
   contactUnlock ContactUnlock @relation(fields: [contactUnlockId], references: [id])
