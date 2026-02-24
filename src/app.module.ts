@@ -5,6 +5,8 @@ import { APP_GUARD } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 
+import { AppController } from './app.controller';
+import { AppService } from './app.service';
 import { PrismaService } from './common/prisma.service';
 import { AuthModule } from './modules/auth/auth.module';
 import { JwtStrategy } from './common/guards/jwt.strategy';
@@ -15,6 +17,7 @@ import { AdminModule } from './modules/admin/admin.module';
 import { validateEnv } from './config/env.validation';
 
 @Module({
+  controllers: [AppController],
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
@@ -47,6 +50,7 @@ import { validateEnv } from './config/env.validation';
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
     },
+    AppService,
     PrismaService,
     JwtStrategy,
   ],
