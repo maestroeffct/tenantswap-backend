@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { PassportModule } from '@nestjs/passport';
 import { APP_GUARD } from '@nestjs/core';
+import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 
 import { PrismaService } from './common/prisma.service';
@@ -10,6 +11,7 @@ import { JwtStrategy } from './common/guards/jwt.strategy';
 import { UsersModule } from './modules/users/users.module';
 import { ListingsModule } from './modules/listings/listings.module';
 import { MatchingModule } from './modules/matching/matching.module';
+import { AdminModule } from './modules/admin/admin.module';
 import { validateEnv } from './config/env.validation';
 
 @Module({
@@ -31,11 +33,14 @@ import { validateEnv } from './config/env.validation';
       ],
     }),
 
+    ScheduleModule.forRoot(),
+
     PassportModule,
     UsersModule,
     AuthModule,
     ListingsModule,
     MatchingModule,
+    AdminModule,
   ],
   providers: [
     {

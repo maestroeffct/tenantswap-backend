@@ -1,7 +1,15 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
-import type { Prisma } from '@prisma/client';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import type { ChainBreakReason, Prisma } from '@prisma/client';
+
 import { PrismaService } from '../../common/prisma.service';
 import { AiService } from './ai.service';
+import { NotificationService } from './notification.service';
 
 type Edge = {
   to: string;
@@ -41,6 +49,7 @@ type ChainCreateOutcome =
         cycleSize: number;
         avgScore: number;
         cycleHash: string;
+        acceptBy: Date | null;
         createdAt: Date;
         members: {
           id: string;
@@ -63,12 +72,35 @@ type ChainCreateOutcome =
       reason: 'lockedConflict';
     };
 
+type RunOptions = {
+  skipExpireSweep?: boolean;
+};
+
+type SweepTrigger = 'REQUEST' | 'SYSTEM_SWEEP' | 'ADMIN_SWEEP';
+
+type RerunSummary = {
+  triggered: number;
+  succeeded: number;
+  failed: number;
+};
+
 @Injectable()
 export class MatchingService {
+  private readonly logger = new Logger(MatchingService.name);
+  private readonly chainAcceptTtlHours: number;
+  private readonly chainExpireSweepLimit: number;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly aiService: AiService,
-  ) {}
+    private readonly notificationService: NotificationService,
+    private readonly config: ConfigService,
+  ) {
+    this.chainAcceptTtlHours =
+      this.config.get<number>('CHAIN_ACCEPT_TTL_HOURS') ?? 24;
+    this.chainExpireSweepLimit =
+      this.config.get<number>('CHAIN_EXPIRE_SWEEP_LIMIT') ?? 50;
+  }
 
   /* ---------------------------- scoring ---------------------------- */
 
@@ -329,6 +361,183 @@ export class MatchingService {
     });
   }
 
+  private computeAcceptByDate() {
+    const durationMs = this.chainAcceptTtlHours * 60 * 60 * 1000;
+    return new Date(Date.now() + durationMs);
+  }
+
+  private async rerunListingsForMembers(
+    listingIds: string[],
+    sourceChainId: string,
+  ): Promise<RerunSummary> {
+    const uniqueListingIds = [...new Set(listingIds)];
+    const summary: RerunSummary = {
+      triggered: uniqueListingIds.length,
+      succeeded: 0,
+      failed: 0,
+    };
+
+    for (const listingId of uniqueListingIds) {
+      try {
+        await this.runForListing(listingId, undefined, {
+          skipExpireSweep: true,
+        });
+        summary.succeeded += 1;
+      } catch (error) {
+        summary.failed += 1;
+        this.logger.warn(
+          `[MATCH_RERUN_FAILED] chainId=${sourceChainId} listingId=${listingId} error=${
+            error instanceof Error ? error.message : 'unknown'
+          }`,
+        );
+      }
+    }
+
+    return summary;
+  }
+
+  private async breakChainAndRecover(
+    chainId: string,
+    reason: ChainBreakReason,
+    options: {
+      actorUserId?: string;
+      actorType: 'USER' | 'ADMIN' | 'SYSTEM';
+      rerunMembers?: boolean;
+    },
+  ) {
+    const chain = await this.prisma.swapChain.findUnique({
+      where: { id: chainId },
+      include: {
+        members: {
+          select: {
+            listingId: true,
+            userId: true,
+          },
+        },
+      },
+    });
+
+    if (!chain) {
+      throw new BadRequestException('Chain not found');
+    }
+
+    if (chain.status === 'BROKEN') {
+      return {
+        changed: false,
+        reason: 'already_broken',
+        rerun: {
+          triggered: 0,
+          succeeded: 0,
+          failed: 0,
+        },
+      };
+    }
+
+    if (chain.status === 'LOCKED' && options.actorType === 'SYSTEM') {
+      return {
+        changed: false,
+        reason: 'already_locked',
+        rerun: {
+          triggered: 0,
+          succeeded: 0,
+          failed: 0,
+        },
+      };
+    }
+
+    await this.prisma.swapChain.update({
+      where: { id: chainId },
+      data: {
+        status: 'BROKEN',
+        brokenReason: reason,
+        brokenAt: new Date(),
+        brokenByUserId: options.actorUserId ?? null,
+      },
+    });
+
+    const listingIds = chain.members.map((member) => member.listingId);
+    const memberUserIds = chain.members.map((member) => member.userId);
+
+    await this.notificationService.notifyMany(
+      memberUserIds.map((userId) => ({
+        userId,
+        chainId,
+        type: 'CHAIN_BROKEN',
+        title: 'Chain Update',
+        message: `Your chain has been marked BROKEN (${reason}). Matching will be rerun for available listings.`,
+        payload: {
+          reason,
+          actorType: options.actorType,
+        },
+      })),
+    );
+
+    const rerun = options.rerunMembers
+      ? await this.rerunListingsForMembers(listingIds, chainId)
+      : { triggered: 0, succeeded: 0, failed: 0 };
+
+    this.logger.warn(
+      `[CHAIN_BROKEN] chainId=${chainId} reason=${reason} actorType=${options.actorType} actorUserId=${
+        options.actorUserId ?? 'n/a'
+      } rerun=${JSON.stringify(rerun)}`,
+    );
+
+    return {
+      changed: true,
+      reason,
+      rerun,
+    };
+  }
+
+  async expirePendingChains(trigger: SweepTrigger, actorUserId?: string) {
+    const now = new Date();
+
+    const expiredChains = await this.prisma.swapChain.findMany({
+      where: {
+        status: 'PENDING',
+        acceptBy: {
+          lt: now,
+        },
+      },
+      orderBy: {
+        acceptBy: 'asc',
+      },
+      take: this.chainExpireSweepLimit,
+      select: {
+        id: true,
+      },
+    });
+
+    let expiredCount = 0;
+    let rerunTriggered = 0;
+
+    for (const chain of expiredChains) {
+      const result = await this.breakChainAndRecover(chain.id, 'EXPIRED', {
+        actorType: 'SYSTEM',
+        actorUserId,
+        rerunMembers: true,
+      });
+
+      if (result.changed) {
+        expiredCount += 1;
+        rerunTriggered += result.rerun.triggered;
+      }
+    }
+
+    if (expiredCount > 0) {
+      this.logger.warn(
+        `[CHAIN_EXPIRE_SWEEP] trigger=${trigger} expiredChains=${expiredCount} rerunTriggered=${rerunTriggered}`,
+      );
+    }
+
+    return {
+      trigger,
+      checked: expiredChains.length,
+      expiredChains: expiredCount,
+      rerunTriggered,
+    };
+  }
+
   private async createChainFromCycle(
     cycle: string[],
     avg: number,
@@ -374,6 +583,7 @@ export class MatchingService {
         status: 'PENDING',
         type: chainType,
         cycleHash: canonical,
+        acceptBy: this.computeAcceptByDate(),
         members: {
           create: cycle.map((id, index) => {
             const listing = listingById.get(id);
@@ -396,6 +606,22 @@ export class MatchingService {
       include: { members: true },
     });
 
+    await this.notificationService.notifyMany(
+      chain.members.map((member) => ({
+        userId: member.userId,
+        chainId: chain.id,
+        type: 'CHAIN_PENDING',
+        title: 'New Chain Proposal',
+        message: `A new ${chainType.toLowerCase()} chain was created. Accept before ${
+          chain.acceptBy?.toISOString() ?? 'deadline'
+        }.`,
+        payload: {
+          chainType,
+          acceptBy: chain.acceptBy,
+        },
+      })),
+    );
+
     return {
       created: true,
       chainType,
@@ -405,7 +631,11 @@ export class MatchingService {
 
   /* ---------------------------- public API ---------------------------- */
 
-  async runForUser(userId: string) {
+  async runForUser(userId: string, options?: RunOptions) {
+    if (!options?.skipExpireSweep) {
+      await this.expirePendingChains('REQUEST');
+    }
+
     const myListing = await this.prisma.swapListing.findFirst({
       where: { userId, status: 'ACTIVE' },
       orderBy: { createdAt: 'desc' },
@@ -417,10 +647,18 @@ export class MatchingService {
       );
     }
 
-    return this.runForListing(myListing.id, userId);
+    return this.runForListing(myListing.id, userId, options);
   }
 
-  async runForListing(listingId: string, userId?: string) {
+  async runForListing(
+    listingId: string,
+    userId?: string,
+    options?: RunOptions,
+  ) {
+    if (!options?.skipExpireSweep) {
+      await this.expirePendingChains('REQUEST');
+    }
+
     const listing = await this.prisma.swapListing.findUnique({
       where: { id: listingId },
       select: {
@@ -645,6 +883,8 @@ export class MatchingService {
   }
 
   async getMyChains(userId: string) {
+    await this.expirePendingChains('REQUEST');
+
     return this.prisma.swapChain.findMany({
       where: { members: { some: { userId } } },
       orderBy: { createdAt: 'desc' },
@@ -653,6 +893,8 @@ export class MatchingService {
   }
 
   async getChainDetail(chainId: string, userId: string) {
+    await this.expirePendingChains('REQUEST');
+
     const chain = await this.prisma.swapChain.findUnique({
       where: { id: chainId },
       include: {
@@ -662,29 +904,33 @@ export class MatchingService {
 
     if (!chain) throw new BadRequestException('Chain not found');
 
-    const isMember = chain.members.some((m) => m.userId === userId);
-    if (!isMember)
+    const isMember = chain.members.some((member) => member.userId === userId);
+    if (!isMember) {
       throw new BadRequestException('You are not a member of this chain');
+    }
 
-    const listingIds = chain.members.map((m) => m.listingId);
+    const listingIds = chain.members.map((member) => member.listingId);
     const listings = await this.prisma.swapListing.findMany({
       where: { id: { in: listingIds } },
       include: { user: true },
     });
 
-    const listingById = new Map(listings.map((l) => [l.id, l] as const));
+    const listingById = new Map(
+      listings.map((listing) => [listing.id, listing]),
+    );
 
-    // check if contacts are unlocked for this chain
     const unlock = await this.prisma.contactUnlock.findFirst({
       where: { chainId },
       include: { approvals: true },
     });
 
-    const memberUserIds = chain.members.map((m) => m.userId);
+    const memberUserIds = chain.members.map((member) => member.userId);
     const approvalsOk =
       unlock &&
-      memberUserIds.every((uid) =>
-        unlock.approvals.some((a) => a.approverUserId === uid),
+      memberUserIds.every((userChainId) =>
+        unlock.approvals.some(
+          (approval) => approval.approverUserId === userChainId,
+        ),
       );
 
     return {
@@ -694,18 +940,21 @@ export class MatchingService {
       status: chain.status,
       type: chain.type,
       cycleHash: chain.cycleHash,
-      members: chain.members.map((m) => {
-        const l = listingById.get(m.listingId);
+      acceptBy: chain.acceptBy,
+      brokenReason: chain.brokenReason,
+      brokenAt: chain.brokenAt,
+      members: chain.members.map((member) => {
+        const listing = listingById.get(member.listingId);
         return {
-          listingId: m.listingId,
-          position: m.position,
-          hasAccepted: m.hasAccepted,
-          fullName: l?.user.fullName ?? null,
-          phone: approvalsOk ? (l?.user.phone ?? null) : null, // 🔒 hidden unless unlocked
-          currentCity: l?.currentCity ?? null,
-          currentType: l?.currentType ?? null,
-          currentRent: l?.currentRent ?? null,
-          desiredCity: l?.desiredCity ?? null,
+          listingId: member.listingId,
+          position: member.position,
+          hasAccepted: member.hasAccepted,
+          fullName: listing?.user.fullName ?? null,
+          phone: approvalsOk ? (listing?.user.phone ?? null) : null,
+          currentCity: listing?.currentCity ?? null,
+          currentType: listing?.currentType ?? null,
+          currentRent: listing?.currentRent ?? null,
+          desiredCity: listing?.desiredCity ?? null,
         };
       }),
       contactUnlocked: Boolean(approvalsOk),
@@ -715,12 +964,41 @@ export class MatchingService {
   /* ---------------------------- accept/decline ---------------------------- */
 
   async acceptChain(chainId: string, userId: string) {
-    const member = await this.prisma.swapChainMember.findFirst({
-      where: { chainId, userId },
+    await this.expirePendingChains('REQUEST');
+
+    const chain = await this.prisma.swapChain.findUnique({
+      where: { id: chainId },
+      include: {
+        members: true,
+      },
     });
 
-    if (!member)
+    if (!chain) {
+      throw new BadRequestException('Chain not found');
+    }
+
+    const member = chain.members.find(
+      (chainMember) => chainMember.userId === userId,
+    );
+    if (!member) {
       throw new BadRequestException('You are not a member of this chain');
+    }
+
+    if (chain.status !== 'PENDING') {
+      throw new BadRequestException('Only PENDING chains can be accepted');
+    }
+
+    const now = Date.now();
+    if (chain.acceptBy && chain.acceptBy.getTime() < now) {
+      await this.breakChainAndRecover(chainId, 'EXPIRED', {
+        actorType: 'SYSTEM',
+        rerunMembers: true,
+      });
+
+      throw new BadRequestException(
+        'This chain has expired and was marked BROKEN',
+      );
+    }
 
     await this.prisma.swapChainMember.update({
       where: { id: member.id },
@@ -729,40 +1007,148 @@ export class MatchingService {
 
     const members = await this.prisma.swapChainMember.findMany({
       where: { chainId },
-      select: { hasAccepted: true },
+      select: { hasAccepted: true, userId: true },
     });
 
-    const allAccepted = members.every((m) => m.hasAccepted);
+    const allAccepted = members.every((chainMember) => chainMember.hasAccepted);
 
     if (allAccepted) {
       await this.prisma.swapChain.update({
         where: { id: chainId },
-        data: { status: 'LOCKED' },
+        data: { status: 'LOCKED', acceptBy: null },
       });
+
+      await this.notificationService.notifyMany(
+        members.map((chainMember) => ({
+          userId: chainMember.userId,
+          chainId,
+          type: 'CHAIN_LOCKED',
+          title: 'Chain Locked',
+          message:
+            'All members accepted. Your chain is now LOCKED and ready for contact unlock.',
+        })),
+      );
     }
 
     return { success: true, allAccepted };
   }
 
   async declineChain(chainId: string, userId: string) {
-    const member = await this.prisma.swapChainMember.findFirst({
-      where: { chainId, userId },
-    });
+    await this.expirePendingChains('REQUEST');
 
-    if (!member)
-      throw new BadRequestException('You are not a member of this chain');
-
-    await this.prisma.swapChain.update({
+    const chain = await this.prisma.swapChain.findUnique({
       where: { id: chainId },
-      data: { status: 'BROKEN' },
+      include: { members: true },
     });
 
-    return { success: true };
+    if (!chain) {
+      throw new BadRequestException('Chain not found');
+    }
+
+    const isMember = chain.members.some((member) => member.userId === userId);
+    if (!isMember) {
+      throw new BadRequestException('You are not a member of this chain');
+    }
+
+    const outcome = await this.breakChainAndRecover(chainId, 'DECLINED', {
+      actorType: 'USER',
+      actorUserId: userId,
+      rerunMembers: true,
+    });
+
+    return {
+      success: true,
+      status: 'BROKEN',
+      rerun: outcome.rerun,
+    };
+  }
+
+  /* ---------------------------- admin controls ---------------------------- */
+
+  async breakChainByAdmin(
+    chainId: string,
+    adminUserId: string,
+    reason: ChainBreakReason,
+  ) {
+    const admin = await this.prisma.user.findUnique({
+      where: { id: adminUserId },
+      select: { role: true },
+    });
+
+    if (!admin || admin.role !== 'ADMIN') {
+      throw new UnauthorizedException('Admin access required');
+    }
+
+    const outcome = await this.breakChainAndRecover(chainId, reason, {
+      actorType: 'ADMIN',
+      actorUserId: adminUserId,
+      rerunMembers: true,
+    });
+
+    return {
+      success: true,
+      status: 'BROKEN',
+      reason,
+      rerun: outcome.rerun,
+      changed: outcome.changed,
+    };
+  }
+
+  async rerunChainMembersByAdmin(chainId: string, adminUserId: string) {
+    const admin = await this.prisma.user.findUnique({
+      where: { id: adminUserId },
+      select: { role: true },
+    });
+
+    if (!admin || admin.role !== 'ADMIN') {
+      throw new UnauthorizedException('Admin access required');
+    }
+
+    const chain = await this.prisma.swapChain.findUnique({
+      where: { id: chainId },
+      include: {
+        members: {
+          select: {
+            listingId: true,
+            userId: true,
+          },
+        },
+      },
+    });
+
+    if (!chain) {
+      throw new BadRequestException('Chain not found');
+    }
+
+    const rerun = await this.rerunListingsForMembers(
+      chain.members.map((member) => member.listingId),
+      chainId,
+    );
+
+    await this.notificationService.notifyMany(
+      chain.members.map((member) => ({
+        userId: member.userId,
+        chainId,
+        type: 'MATCH_RERUN',
+        title: 'Matching Rerun',
+        message: 'Matching has been rerun for your listing by support.',
+        payload: {
+          rerunBy: adminUserId,
+        },
+      })),
+    );
+
+    return {
+      success: true,
+      rerun,
+    };
   }
 
   /* ---------------------------- contact unlock ---------------------------- */
 
   async requestContactUnlock(chainId: string, userId: string) {
+    await this.expirePendingChains('REQUEST');
+
     const chain = await this.prisma.swapChain.findUnique({
       where: { id: chainId },
       include: { members: true },
@@ -770,9 +1156,10 @@ export class MatchingService {
 
     if (!chain) throw new BadRequestException('Chain not found');
 
-    const isMember = chain.members.some((m) => m.userId === userId);
-    if (!isMember)
+    const isMember = chain.members.some((member) => member.userId === userId);
+    if (!isMember) {
       throw new BadRequestException('You are not a member of this chain');
+    }
 
     if (chain.status !== 'LOCKED') {
       throw new BadRequestException(
@@ -780,7 +1167,6 @@ export class MatchingService {
       );
     }
 
-    // create unlock request
     const unlock = await this.prisma.contactUnlock.create({
       data: {
         chainId,
@@ -788,7 +1174,6 @@ export class MatchingService {
       },
     });
 
-    // requester auto-approves
     await this.prisma.contactUnlockApproval.create({
       data: {
         contactUnlockId: unlock.id,
@@ -808,7 +1193,9 @@ export class MatchingService {
 
     if (!unlock) throw new BadRequestException('Unlock request not found');
 
-    const isMember = unlock.chain.members.some((m) => m.userId === userId);
+    const isMember = unlock.chain.members.some(
+      (member) => member.userId === userId,
+    );
     if (!isMember)
       throw new BadRequestException('You are not a member of this chain');
 

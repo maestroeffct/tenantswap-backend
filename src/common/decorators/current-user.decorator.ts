@@ -9,6 +9,7 @@ export type CurrentUserPayload = {
   id: string;
   fullName: string;
   phone: string;
+  role: 'USER' | 'ADMIN';
 };
 
 export const CurrentUser = createParamDecorator(

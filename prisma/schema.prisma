@@ -8,25 +8,27 @@ datasource db {
 }
 
 model User {
-  id                           String   @id @default(uuid())
-  fullName                     String
-  email                        String?  @unique
-  phone                        String   @unique
-  password                     String
-  emailVerifiedAt              DateTime?
-  emailVerificationTokenHash   String?
-  emailVerificationExpiresAt   DateTime?
-  createdAt                    DateTime @default(now())
+  id                         String    @id @default(uuid())
+  role                       UserRole  @default(USER)
+  fullName                   String
+  email                      String?   @unique
+  phone                      String    @unique
+  password                   String
+  emailVerifiedAt            DateTime?
+  emailVerificationTokenHash String?
+  emailVerificationExpiresAt DateTime?
+  createdAt                  DateTime  @default(now())
 
-  listings                     SwapListing[]
+  listings      SwapListing[]
+  notifications UserNotification[]
 
   @@index([emailVerificationTokenHash])
 }
 
 model SwapListing {
-  id        String        @id @default(uuid())
-  userId    String
-  status    ListingStatus @default(DRAFT)
+  id     String        @id @default(uuid())
+  userId String
+  status ListingStatus @default(DRAFT)
 
   // WHAT USER IS LOOKING FOR
   desiredType String
@@ -46,6 +48,11 @@ model SwapListing {
   user User @relation(fields: [userId], references: [id])
 }
 
+enum UserRole {
+  USER
+  ADMIN
+}
+
 enum ListingStatus {
   DRAFT
   ACTIVE
@@ -62,6 +69,15 @@ enum ChainStatus {
 enum ChainType {
   DIRECT
   CIRCULAR
+}
+
+enum ChainBreakReason {
+  DECLINED
+  EXPIRED
+  ADMIN_FORCE
+  NO_SHOW
+  CONFLICT
+  UNKNOWN
 }
 
 model MatchCandidate {
@@ -89,13 +105,24 @@ model SwapChain {
   cycleSize Int
   avgScore  Int
 
+  // Chain acceptance deadline.
+  acceptBy DateTime?
+
+  // Break metadata helps post-mortem and enforcement rules.
+  brokenReason   ChainBreakReason?
+  brokenAt       DateTime?
+  brokenByUserId String?
+
   // prevents mirrored duplicates
   cycleHash String @unique
 
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   members        SwapChainMember[]
   contactUnlocks ContactUnlock[]
+
+  @@index([status, acceptBy])
 }
 
 model SwapChainMember {
@@ -127,7 +154,7 @@ model ContactUnlock {
 }
 
 model ContactUnlockApproval {
-  id             String   @id @default(uuid())
+  id              String   @id @default(uuid())
   contactUnlockId String
   approverUserId  String
   approved        Boolean  @default(true)
@@ -136,4 +163,21 @@ model ContactUnlockApproval {
   contactUnlock ContactUnlock @relation(fields: [contactUnlockId], references: [id])
 
   @@unique([contactUnlockId, approverUserId])
+}
+
+model UserNotification {
+  id        String   @id @default(uuid())
+  userId    String
+  chainId   String?
+  type      String
+  title     String
+  message   String
+  payload   Json?
+  readAt    DateTime?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+  @@index([chainId])
 }

@@ -109,5 +109,15 @@ export function validateEnv(config: RawEnv): RawEnv {
       'EMAIL_VERIFICATION_TOKEN_TTL_MS',
       86_400_000,
     ),
+    CHAIN_ACCEPT_TTL_HOURS: asPositiveInt(
+      config.CHAIN_ACCEPT_TTL_HOURS,
+      'CHAIN_ACCEPT_TTL_HOURS',
+      24,
+    ),
+    CHAIN_EXPIRE_SWEEP_LIMIT: asPositiveInt(
+      config.CHAIN_EXPIRE_SWEEP_LIMIT,
+      'CHAIN_EXPIRE_SWEEP_LIMIT',
+      50,
+    ),
   };
 }

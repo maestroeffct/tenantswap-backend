@@ -1,13 +1,21 @@
+import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 
 import { PrismaService } from '../../common/prisma.service';
 import { AiService } from './ai.service';
 import { MatchingService } from './matching.service';
+import { NotificationService } from './notification.service';
 
 describe('MatchingService', () => {
   let service: MatchingService;
 
   const prismaMock = {
+    user: {
+      findUnique: jest.fn(),
+    },
+    userNotification: {
+      createMany: jest.fn(),
+    },
     swapListing: {
       findFirst: jest.fn(),
       findUnique: jest.fn(),
@@ -43,8 +51,21 @@ describe('MatchingService', () => {
     suggestNoMatch: jest.fn(() => ['tip']),
   };
 
+  const notificationServiceMock = {
+    notifyMany: jest.fn(() => Promise.resolve()),
+  };
+
+  const configServiceMock = {
+    get: jest.fn((key: string) => {
+      if (key === 'CHAIN_ACCEPT_TTL_HOURS') return 24;
+      if (key === 'CHAIN_EXPIRE_SWEEP_LIMIT') return 50;
+      return undefined;
+    }),
+  };
+
   beforeEach(async () => {
     jest.clearAllMocks();
+    prismaMock.swapChain.findMany.mockResolvedValue([]);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -56,6 +77,14 @@ describe('MatchingService', () => {
         {
           provide: AiService,
           useValue: aiServiceMock,
+        },
+        {
+          provide: NotificationService,
+          useValue: notificationServiceMock,
+        },
+        {
+          provide: ConfigService,
+          useValue: configServiceMock,
         },
       ],
     }).compile();
@@ -113,8 +142,26 @@ describe('MatchingService', () => {
       cycleSize: 2,
       avgScore: 74,
       cycleHash: 'A-B',
+      acceptBy: new Date('2026-03-02T00:00:00.000Z'),
       createdAt: new Date('2026-03-01T00:00:00.000Z'),
-      members: [],
+      members: [
+        {
+          id: 'member-a',
+          chainId: 'chain-1',
+          listingId: 'A',
+          userId: 'user-A',
+          position: 0,
+          hasAccepted: false,
+        },
+        {
+          id: 'member-b',
+          chainId: 'chain-1',
+          listingId: 'B',
+          userId: 'user-B',
+          position: 1,
+          hasAccepted: false,
+        },
+      ],
     });
 
     const result = await service.runForListing('A', 'user-A');
@@ -125,6 +172,7 @@ describe('MatchingService', () => {
     expect(result.recommendations).toHaveLength(1);
     expect(result.recommendations[0].relationship).toBe('ONE_TO_ONE');
     expect(prismaMock.swapChain.create).toHaveBeenCalledTimes(1);
+    expect(notificationServiceMock.notifyMany).toHaveBeenCalled();
   });
 
   it('returns one-way recommendations when there is no chain', async () => {
