@@ -19,8 +19,9 @@ model User {
   emailVerificationExpiresAt DateTime?
   createdAt                  DateTime  @default(now())
 
-  listings      SwapListing[]
-  notifications UserNotification[]
+  listings           SwapListing[]
+  notifications      UserNotification[]
+  interestsRequested ListingInterest[] @relation("UserRequestedInterests")
 
   @@index([emailVerificationTokenHash])
 }
@@ -42,10 +43,19 @@ model SwapListing {
   currentRent Int
   availableOn DateTime
 
-  features  String[]
+  features String[]
+
+  // Interest-based matching metadata.
+  matchedInterestId String?
+  matchedAt         DateTime?
+
   createdAt DateTime @default(now())
 
-  user User @relation(fields: [userId], references: [id])
+  user              User              @relation(fields: [userId], references: [id])
+  incomingInterests ListingInterest[] @relation("ListingIncomingInterests")
+  outgoingInterests ListingInterest[] @relation("ListingOutgoingInterests")
+
+  @@index([matchedInterestId])
 }
 
 enum UserRole {
@@ -80,6 +90,15 @@ enum ChainBreakReason {
   UNKNOWN
 }
 
+enum ListingInterestStatus {
+  REQUESTED
+  CONTACT_APPROVED
+  DECLINED
+  RELEASED
+  EXPIRED
+  CONFIRMED_RENTER
+}
+
 model MatchCandidate {
   id String @id @default(uuid())
 
@@ -95,6 +114,29 @@ model MatchCandidate {
   createdAt DateTime @default(now())
 
   @@unique([fromListingId, toListingId])
+}
+
+model ListingInterest {
+  id               String               @id @default(uuid())
+  listingId        String
+  requesterListingId String
+  requesterUserId  String
+  status           ListingInterestStatus @default(REQUESTED)
+  expiresAt        DateTime?
+  respondedAt      DateTime?
+  releasedAt       DateTime?
+  confirmedAt      DateTime?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  listing          SwapListing          @relation("ListingIncomingInterests", fields: [listingId], references: [id])
+  requesterListing SwapListing          @relation("ListingOutgoingInterests", fields: [requesterListingId], references: [id])
+  requesterUser    User                 @relation("UserRequestedInterests", fields: [requesterUserId], references: [id])
+
+  @@unique([listingId, requesterListingId])
+  @@index([listingId, status, createdAt])
+  @@index([requesterUserId, status, createdAt])
+  @@index([status, expiresAt])
 }
 
 model SwapChain {

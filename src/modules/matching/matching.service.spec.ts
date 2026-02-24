@@ -20,6 +20,14 @@ describe('MatchingService', () => {
       findFirst: jest.fn(),
       findUnique: jest.fn(),
       findMany: jest.fn(),
+      update: jest.fn(),
+    },
+    listingInterest: {
+      upsert: jest.fn(),
+      findMany: jest.fn(),
+      findUnique: jest.fn(),
+      update: jest.fn(),
+      updateMany: jest.fn(),
     },
     matchCandidate: {
       upsert: jest.fn(),
@@ -59,6 +67,8 @@ describe('MatchingService', () => {
     get: jest.fn((key: string) => {
       if (key === 'CHAIN_ACCEPT_TTL_HOURS') return 24;
       if (key === 'CHAIN_EXPIRE_SWEEP_LIMIT') return 50;
+      if (key === 'INTEREST_REQUEST_TTL_HOURS') return 48;
+      if (key === 'INTEREST_EXPIRE_SWEEP_LIMIT') return 100;
       return undefined;
     }),
   };
@@ -66,6 +76,7 @@ describe('MatchingService', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     prismaMock.swapChain.findMany.mockResolvedValue([]);
+    prismaMock.listingInterest.findMany.mockResolvedValue([]);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -171,6 +182,7 @@ describe('MatchingService', () => {
     expect(result.matchScenario).toBe('ONE_TO_ONE');
     expect(result.recommendations).toHaveLength(1);
     expect(result.recommendations[0].relationship).toBe('ONE_TO_ONE');
+    expect(result.stats.totalCandidates).toBe(1);
     expect(prismaMock.swapChain.create).toHaveBeenCalledTimes(1);
     expect(notificationServiceMock.notifyMany).toHaveBeenCalled();
   });
@@ -269,5 +281,67 @@ describe('MatchingService', () => {
     expect(result.recommendations).toHaveLength(0);
     expect(result.aiSuggestions).toEqual(['tip']);
     expect(aiServiceMock.suggestNoMatch).toHaveBeenCalledTimes(1);
+  });
+
+  it('creates an interest request for compatible listings', async () => {
+    const targetListing = {
+      id: 'target-1',
+      userId: 'owner-1',
+      status: 'ACTIVE',
+      desiredCity: 'Ibadan',
+      desiredType: '3 Bedroom',
+      maxBudget: 2000,
+      timeline: '60 days',
+      currentCity: 'Lagos',
+      currentType: '2 Bedroom',
+      currentRent: 1000,
+      availableOn: new Date('2026-03-14T00:00:00.000Z'),
+      features: ['security'],
+      user: {
+        id: 'owner-1',
+        fullName: 'Owner One',
+        phone: '+2348011111111',
+      },
+    };
+
+    const requesterListing = {
+      id: 'requester-listing-1',
+      userId: 'requester-1',
+      status: 'ACTIVE',
+      desiredCity: 'Lagos',
+      desiredType: '2 Bedroom',
+      maxBudget: 1200,
+      timeline: '45 days',
+      currentCity: 'Abuja',
+      currentType: '1 Bedroom',
+      currentRent: 700,
+      availableOn: new Date('2026-03-01T00:00:00.000Z'),
+      features: ['parking'],
+      user: {
+        id: 'requester-1',
+        fullName: 'Requester One',
+        phone: '+2348022222222',
+      },
+    };
+
+    prismaMock.swapListing.findUnique.mockResolvedValue(targetListing);
+    prismaMock.swapListing.findFirst.mockResolvedValue(requesterListing);
+    prismaMock.listingInterest.upsert.mockResolvedValue({
+      id: 'interest-1',
+      status: 'REQUESTED',
+      listingId: targetListing.id,
+      requesterListingId: requesterListing.id,
+      expiresAt: new Date('2026-03-03T00:00:00.000Z'),
+    });
+
+    const result = await service.requestInterest(
+      targetListing.id,
+      'requester-1',
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.interest.status).toBe('REQUESTED');
+    expect(prismaMock.listingInterest.upsert).toHaveBeenCalledTimes(1);
+    expect(notificationServiceMock.notifyMany).toHaveBeenCalled();
   });
 });

@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "TenantSwap Backend API",
-    "description": "Complete API collection for TenantSwap backend.\n\nWorkflow:\n1. Register\n2. Verify email (or resend + verify)\n3. Login\n4. Create listing\n5. Run matching\n6. Accept/Decline chain\n7. Unlock contacts",
+    "description": "Complete API collection for TenantSwap backend including auth, listing, chain matching, one-to-many interest flow, and admin actions.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -21,6 +21,10 @@
     },
     {
       "key": "accessToken",
+      "value": ""
+    },
+    {
+      "key": "adminAccessToken",
       "value": ""
     },
     {
@@ -44,11 +48,27 @@
       "value": ""
     },
     {
+      "key": "targetListingId",
+      "value": ""
+    },
+    {
+      "key": "requesterListingId",
+      "value": ""
+    },
+    {
+      "key": "interestId",
+      "value": ""
+    },
+    {
       "key": "chainId",
       "value": ""
     },
     {
       "key": "unlockId",
+      "value": ""
+    },
+    {
+      "key": "adminChainId",
       "value": ""
     }
   ],
@@ -59,9 +79,6 @@
         {
           "name": "GET /",
           "request": {
-            "auth": {
-              "type": "noauth"
-            },
             "method": "GET",
             "header": [],
             "url": {
@@ -71,7 +88,7 @@
               ],
               "path": []
             },
-            "description": "Basic health check route."
+            "description": "Basic health route."
           }
         }
       ]
@@ -81,20 +98,6 @@
       "item": [
         {
           "name": "POST /auth/register",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "let data = {};",
-                  "try { data = pm.response.json(); } catch (e) {}",
-                  "if (data.verificationToken) pm.collectionVariables.set('verificationToken', data.verificationToken);",
-                  "if (data.accessToken) pm.collectionVariables.set('accessToken', data.accessToken);"
-                ]
-              }
-            }
-          ],
           "request": {
             "auth": {
               "type": "noauth"
@@ -106,6 +109,10 @@
                 "value": "application/json"
               }
             ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Ada Lovelace\",\n  \"email\": \"{{email}}\",\n  \"phone\": \"{{phone}}\",\n  \"password\": \"{{password}}\"\n}"
+            },
             "url": {
               "raw": "{{baseUrl}}/auth/register",
               "host": [
@@ -116,58 +123,8 @@
                 "register"
               ]
             },
-            "description": "Register a new user. Returns a generic message and verification token in non-production environments.",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"fullName\": \"Ada Lovelace\",\n  \"email\": \"{{email}}\",\n  \"phone\": \"{{phone}}\",\n  \"password\": \"{{password}}\"\n}"
-            }
-          }
-        },
-        {
-          "name": "POST /auth/verify-email",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "let data = {};",
-                  "try { data = pm.response.json(); } catch (e) {}",
-                  "if (data.accessToken) pm.collectionVariables.set('accessToken', data.accessToken);"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "auth": {
-              "type": "noauth"
-            },
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/auth/verify-email",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "auth",
-                "verify-email"
-              ]
-            },
-            "description": "Verify email with the token from register/resend and return JWT access token.",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"token\": \"{{verificationToken}}\"\n}"
-            }
-          }
-        },
-        {
-          "name": "POST /auth/resend-verification",
+            "description": "Register user and (non-prod) receive verification token."
+          },
           "event": [
             {
               "listen": "test",
@@ -180,7 +137,10 @@
                 ]
               }
             }
-          ],
+          ]
+        },
+        {
+          "name": "POST /auth/verify-email",
           "request": {
             "auth": {
               "type": "noauth"
@@ -192,25 +152,22 @@
                 "value": "application/json"
               }
             ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{verificationToken}}\"\n}"
+            },
             "url": {
-              "raw": "{{baseUrl}}/auth/resend-verification",
+              "raw": "{{baseUrl}}/auth/verify-email",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "auth",
-                "resend-verification"
+                "verify-email"
               ]
             },
-            "description": "Request a new verification email for an unverified account. Generic response to prevent enumeration.",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"email\": \"{{email}}\"\n}"
-            }
-          }
-        },
-        {
-          "name": "POST /auth/login",
+            "description": "Verify email with token and issue access token."
+          },
           "event": [
             {
               "listen": "test",
@@ -223,7 +180,10 @@
                 ]
               }
             }
-          ],
+          ]
+        },
+        {
+          "name": "POST /auth/resend-verification",
           "request": {
             "auth": {
               "type": "noauth"
@@ -235,6 +195,53 @@
                 "value": "application/json"
               }
             ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/resend-verification",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "resend-verification"
+              ]
+            },
+            "description": "Resend verification for unverified email."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let data = {};",
+                  "try { data = pm.response.json(); } catch (e) {}",
+                  "if (data.verificationToken) pm.collectionVariables.set('verificationToken', data.verificationToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /auth/login",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"{{phone}}\",\n  \"password\": \"{{password}}\"\n}"
+            },
             "url": {
               "raw": "{{baseUrl}}/auth/login",
               "host": [
@@ -245,12 +252,21 @@
                 "login"
               ]
             },
-            "description": "Login with phone/password. Fails if email is not verified.",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"phone\": \"{{phone}}\",\n  \"password\": \"{{password}}\"\n}"
+            "description": "Login and store access token."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let data = {};",
+                  "try { data = pm.response.json(); } catch (e) {}",
+                  "if (data.accessToken) pm.collectionVariables.set('accessToken', data.accessToken);"
+                ]
+              }
             }
-          }
+          ]
         }
       ]
     },
@@ -272,7 +288,7 @@
                 "me"
               ]
             },
-            "description": "Fetch currently authenticated user profile payload."
+            "description": "Get current authenticated user."
           }
         }
       ]
@@ -282,19 +298,6 @@
       "item": [
         {
           "name": "POST /listings",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "let data = {};",
-                  "try { data = pm.response.json(); } catch (e) {}",
-                  "if (data.listing && data.listing.id) pm.collectionVariables.set('listingId', data.listing.id);"
-                ]
-              }
-            }
-          ],
           "request": {
             "method": "POST",
             "header": [
@@ -303,10 +306,6 @@
                 "value": "application/json"
               }
             ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"desiredType\": \"2-Bedroom Apartment\",\n  \"desiredCity\": \"Lagos\",\n  \"maxBudget\": 2500000,\n  \"timeline\": \"Within 2 months\",\n  \"currentType\": \"1-Bedroom Apartment\",\n  \"currentCity\": \"Abuja\",\n  \"currentRent\": 1800000,\n  \"availableOn\": \"2026-03-15\",\n  \"features\": [\"parking\", \"balcony\", \"security\"]\n}"
-            },
             "url": {
               "raw": "{{baseUrl}}/listings",
               "host": [
@@ -316,8 +315,28 @@
                 "listings"
               ]
             },
-            "description": "Create a new ACTIVE listing for authenticated user."
-          }
+            "description": "Create active listing.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"desiredType\": \"2-Bedroom Apartment\",\n  \"desiredCity\": \"Lagos\",\n  \"maxBudget\": 2500000,\n  \"timeline\": \"Within 2 months\",\n  \"currentType\": \"1-Bedroom Apartment\",\n  \"currentCity\": \"Abuja\",\n  \"currentRent\": 1800000,\n  \"availableOn\": \"2026-03-15\",\n  \"features\": [\"parking\", \"balcony\", \"security\"]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let data = {};",
+                  "try { data = pm.response.json(); } catch (e) {}",
+                  "if (data.listing && data.listing.id) {",
+                  "  pm.collectionVariables.set('listingId', data.listing.id);",
+                  "  if (!pm.collectionVariables.get('requesterListingId')) pm.collectionVariables.set('requesterListingId', data.listing.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "GET /listings/me",
@@ -334,8 +353,23 @@
                 "me"
               ]
             },
-            "description": "Get all listings created by authenticated user (latest first)."
-          }
+            "description": "Get my listings."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let data = [];",
+                  "try { data = pm.response.json(); } catch (e) {}",
+                  "if (Array.isArray(data) && data.length && data[0].id) {",
+                  "  pm.collectionVariables.set('listingId', data[0].id);",
+                  "}"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
@@ -344,19 +378,6 @@
       "item": [
         {
           "name": "POST /matching/run",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "let data = {};",
-                  "try { data = pm.response.json(); } catch (e) {}",
-                  "if (data.chain && data.chain.id) pm.collectionVariables.set('chainId', data.chain.id);"
-                ]
-              }
-            }
-          ],
           "request": {
             "method": "POST",
             "header": [],
@@ -370,11 +391,8 @@
                 "run"
               ]
             },
-            "description": "Run matching using your latest ACTIVE listing."
-          }
-        },
-        {
-          "name": "POST /matching/run/:listingId",
+            "description": "Run matching for latest active listing."
+          },
           "event": [
             {
               "listen": "test",
@@ -383,11 +401,15 @@
                 "exec": [
                   "let data = {};",
                   "try { data = pm.response.json(); } catch (e) {}",
-                  "if (data.chain && data.chain.id) pm.collectionVariables.set('chainId', data.chain.id);"
+                  "if (data.chain && data.chain.id) pm.collectionVariables.set('chainId', data.chain.id);",
+                  "if (data.recommendations && data.recommendations.length) pm.collectionVariables.set('targetListingId', data.recommendations[0].listingId);"
                 ]
               }
             }
-          ],
+          ]
+        },
+        {
+          "name": "POST /matching/run/:listingId",
           "request": {
             "method": "POST",
             "header": [],
@@ -402,24 +424,180 @@
                 "{{listingId}}"
               ]
             },
-            "description": "Run matching for a specific listing ID owned by authenticated user."
-          }
-        },
-        {
-          "name": "GET /matching/chains/me",
+            "description": "Run matching for specific listing."
+          },
           "event": [
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "let data = [];",
+                  "let data = {};",
                   "try { data = pm.response.json(); } catch (e) {}",
-                  "if (Array.isArray(data) && data.length && data[0].id) pm.collectionVariables.set('chainId', data[0].id);"
+                  "if (data.chain && data.chain.id) pm.collectionVariables.set('chainId', data.chain.id);",
+                  "if (data.recommendations && data.recommendations.length) pm.collectionVariables.set('targetListingId', data.recommendations[0].listingId);"
                 ]
               }
             }
-          ],
+          ]
+        },
+        {
+          "name": "POST /matching/interests/:targetListingId/request",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/matching/interests/{{targetListingId}}/request",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "matching",
+                "interests",
+                "{{targetListingId}}",
+                "request"
+              ]
+            },
+            "description": "Send interest request to target listing owner.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"requesterListingId\": \"{{requesterListingId}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let data = {};",
+                  "try { data = pm.response.json(); } catch (e) {}",
+                  "if (data.interest && data.interest.id) pm.collectionVariables.set('interestId', data.interest.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /matching/interests/incoming",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/matching/interests/incoming",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "matching",
+                "interests",
+                "incoming"
+              ]
+            },
+            "description": "Owner view of all incoming interest requests."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let data = {};",
+                  "try { data = pm.response.json(); } catch (e) {}",
+                  "if (data.listings && data.listings.length && data.listings[0].requests && data.listings[0].requests.length) {",
+                  "  pm.collectionVariables.set('interestId', data.listings[0].requests[0].interestId);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /matching/interests/outgoing",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/matching/interests/outgoing",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "matching",
+                "interests",
+                "outgoing"
+              ]
+            },
+            "description": "Requester view of sent interests."
+          }
+        },
+        {
+          "name": "POST /matching/interests/:interestId/approve",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/matching/interests/{{interestId}}/approve",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "matching",
+                "interests",
+                "{{interestId}}",
+                "approve"
+              ]
+            },
+            "description": "Owner approves contact for one request."
+          }
+        },
+        {
+          "name": "POST /matching/interests/:interestId/decline",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/matching/interests/{{interestId}}/decline",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "matching",
+                "interests",
+                "{{interestId}}",
+                "decline"
+              ]
+            },
+            "description": "Owner declines one request."
+          }
+        },
+        {
+          "name": "POST /matching/interests/:interestId/confirm-renter",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/matching/interests/{{interestId}}/confirm-renter",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "matching",
+                "interests",
+                "{{interestId}}",
+                "confirm-renter"
+              ]
+            },
+            "description": "Owner confirms renter and releases others."
+          }
+        },
+        {
+          "name": "GET /matching/chains/me",
           "request": {
             "method": "GET",
             "header": [],
@@ -434,8 +612,24 @@
                 "me"
               ]
             },
-            "description": "Get all chains where the authenticated user is a member."
-          }
+            "description": "Get chains where current user is a member."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let data = [];",
+                  "try { data = pm.response.json(); } catch (e) {}",
+                  "if (Array.isArray(data) && data.length && data[0].id) {",
+                  "  pm.collectionVariables.set('chainId', data[0].id);",
+                  "  pm.collectionVariables.set('adminChainId', data[0].id);",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "GET /matching/chains/:chainId",
@@ -453,7 +647,7 @@
                 "{{chainId}}"
               ]
             },
-            "description": "Get detailed chain info. Phone numbers are hidden until contact unlock is fully approved by all chain members."
+            "description": "Get chain details."
           }
         },
         {
@@ -473,7 +667,7 @@
                 "accept"
               ]
             },
-            "description": "Accept a chain as the authenticated member. When all members accept, chain status becomes LOCKED."
+            "description": "Accept chain."
           }
         },
         {
@@ -493,24 +687,11 @@
                 "decline"
               ]
             },
-            "description": "Decline a chain as the authenticated member. Chain status becomes BROKEN."
+            "description": "Decline chain."
           }
         },
         {
           "name": "POST /matching/chains/:chainId/connect",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "let data = {};",
-                  "try { data = pm.response.json(); } catch (e) {}",
-                  "if (data.unlockId) pm.collectionVariables.set('unlockId', data.unlockId);"
-                ]
-              }
-            }
-          ],
           "request": {
             "method": "POST",
             "header": [],
@@ -526,8 +707,21 @@
                 "connect"
               ]
             },
-            "description": "Create a contact unlock request for a LOCKED chain. Requester auto-approves."
-          }
+            "description": "Request chain contact unlock."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let data = {};",
+                  "try { data = pm.response.json(); } catch (e) {}",
+                  "if (data.unlockId) pm.collectionVariables.set('unlockId', data.unlockId);"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "POST /matching/connect/:unlockId/approve",
@@ -546,7 +740,140 @@
                 "approve"
               ]
             },
-            "description": "Approve an existing contact unlock request as a chain member."
+            "description": "Approve chain contact unlock."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin",
+      "item": [
+        {
+          "name": "POST /admin/chains/expire-overdue",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/chains/expire-overdue",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "chains",
+                "expire-overdue"
+              ]
+            },
+            "description": "Admin force-sweep overdue chains.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST /admin/chains/:chainId/break",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/chains/{{adminChainId}}/break",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "chains",
+                "{{adminChainId}}",
+                "break"
+              ]
+            },
+            "description": "Admin force-break a chain with reason.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"ADMIN_FORCE\"\n}"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST /admin/chains/:chainId/expire",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/chains/{{adminChainId}}/expire",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "chains",
+                "{{adminChainId}}",
+                "expire"
+              ]
+            },
+            "description": "Admin force-expire a chain.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST /admin/chains/:chainId/rerun",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/chains/{{adminChainId}}/rerun",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "chains",
+                "{{adminChainId}}",
+                "rerun"
+              ]
+            },
+            "description": "Admin reruns matching for members of a chain.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
           }
         }
       ]

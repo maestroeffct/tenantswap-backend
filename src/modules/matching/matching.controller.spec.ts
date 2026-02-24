@@ -15,6 +15,12 @@ describe('MatchingController', () => {
           useValue: {
             runForUser: jest.fn(),
             runForListing: jest.fn(),
+            requestInterest: jest.fn(),
+            getIncomingInterests: jest.fn(),
+            getOutgoingInterests: jest.fn(),
+            approveInterest: jest.fn(),
+            declineInterest: jest.fn(),
+            confirmRenter: jest.fn(),
             getMyChains: jest.fn(),
             getChainDetail: jest.fn(),
             acceptChain: jest.fn(),

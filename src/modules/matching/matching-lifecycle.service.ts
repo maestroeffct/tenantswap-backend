@@ -12,16 +12,21 @@ export class MatchingLifecycleService {
   @Interval(60_000)
   async sweepExpiredChains() {
     try {
-      const result =
+      const chainResult =
         await this.matchingService.expirePendingChains('SYSTEM_SWEEP');
+      const interestResult =
+        await this.matchingService.expireListingInterests('SYSTEM_SWEEP');
 
-      if (result.expiredChains > 0) {
+      if (
+        chainResult.expiredChains > 0 ||
+        interestResult.expiredInterests > 0
+      ) {
         this.logger.warn(
-          `Expired ${result.expiredChains} chain(s), reran ${result.rerunTriggered} listing(s).`,
+          `Sweep finished: expiredChains=${chainResult.expiredChains}, expiredInterests=${interestResult.expiredInterests}.`,
         );
       }
     } catch (error) {
-      this.logger.error('Failed to sweep expired chains', error as Error);
+      this.logger.error('Failed to sweep matching lifecycle', error as Error);
     }
   }
 }

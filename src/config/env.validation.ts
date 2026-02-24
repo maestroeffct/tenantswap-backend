@@ -119,5 +119,15 @@ export function validateEnv(config: RawEnv): RawEnv {
       'CHAIN_EXPIRE_SWEEP_LIMIT',
       50,
     ),
+    INTEREST_REQUEST_TTL_HOURS: asPositiveInt(
+      config.INTEREST_REQUEST_TTL_HOURS,
+      'INTEREST_REQUEST_TTL_HOURS',
+      48,
+    ),
+    INTEREST_EXPIRE_SWEEP_LIMIT: asPositiveInt(
+      config.INTEREST_EXPIRE_SWEEP_LIMIT,
+      'INTEREST_EXPIRE_SWEEP_LIMIT',
+      100,
+    ),
   };
 }

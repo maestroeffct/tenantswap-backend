@@ -1,9 +1,10 @@
-import { Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { CurrentUserPayload } from '../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt.guard';
+import { RequestInterestDto } from './dto/request-interest.dto';
 import { MatchingService } from './matching.service';
 
 @Controller('matching')
@@ -25,6 +26,60 @@ export class MatchingController {
     @Param('listingId') listingId: string,
   ) {
     return this.matchingService.runForListing(listingId, user.id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Throttle({ default: { limit: 12, ttl: 60_000 } })
+  @Post('interests/:targetListingId/request')
+  requestInterest(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param('targetListingId') targetListingId: string,
+    @Body() dto: RequestInterestDto,
+  ) {
+    return this.matchingService.requestInterest(
+      targetListingId,
+      user.id,
+      dto.requesterListingId,
+    );
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('interests/incoming')
+  incomingInterests(@CurrentUser() user: CurrentUserPayload) {
+    return this.matchingService.getIncomingInterests(user.id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('interests/outgoing')
+  outgoingInterests(@CurrentUser() user: CurrentUserPayload) {
+    return this.matchingService.getOutgoingInterests(user.id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('interests/:interestId/approve')
+  approveInterest(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param('interestId') interestId: string,
+  ) {
+    return this.matchingService.approveInterest(interestId, user.id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('interests/:interestId/decline')
+  declineInterest(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param('interestId') interestId: string,
+  ) {
+    return this.matchingService.declineInterest(interestId, user.id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('interests/:interestId/confirm-renter')
+  confirmRenter(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param('interestId') interestId: string,
+  ) {
+    return this.matchingService.confirmRenter(interestId, user.id);
   }
 
   @UseGuards(JwtAuthGuard)
