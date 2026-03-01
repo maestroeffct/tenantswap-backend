@@ -124,6 +124,8 @@ Error example:
 | POST | `/auth/resend-verification` | No | Resend email verification token |
 | POST | `/auth/login` | No | Login with phone + password |
 | GET | `/users/me` | Yes | Current authenticated user |
+| PATCH | `/users/me` | Yes | Update profile (fullName/email/phone) |
+| PATCH | `/users/me/password` | Yes | Change account password |
 | GET | `/users/me/reliability` | Yes | Current user reliability status |
 | GET | `/billing/me` | Yes | Subscription status + tester bypass/access state |
 | POST | `/billing/checkout` | Yes | Create checkout/payment intent metadata |
@@ -378,6 +380,31 @@ Request header: `x-payment-webhook-secret: <PAYMENT_WEBHOOK_SECRET>`
 
 A successful webhook marks the user subscription as `ACTIVE`.
 When subscription enforcement blocks protected endpoints, API returns `402`.
+
+
+### PATCH `/users/me`
+
+Update request body (all fields optional):
+
+```json
+{
+  "fullName": "Ada Lovelace",
+  "email": "ada@example.com",
+  "phone": "+2348012345678",
+  "currentPassword": "OldPassword1!"
+}
+```
+
+`currentPassword` is required when changing `email` or `phone`.
+
+### PATCH `/users/me/password`
+
+```json
+{
+  "currentPassword": "OldPassword1!",
+  "newPassword": "NewPassword1!"
+}
+```
 
 ### GET `/users/me/reliability`
 

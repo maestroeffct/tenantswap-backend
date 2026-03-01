@@ -141,3 +141,11 @@ Backend-only endpoint used by payment gateway to activate/renew/cancel subscript
 ### GET `/users/me/reliability`
 
 Returns reliability score and restriction timestamps in `response.data`.
+
+### PATCH `/users/me`
+
+Use for profile edits. If changing `email` or `phone`, send `currentPassword` in request body.
+
+### PATCH `/users/me/password`
+
+Use for password change (`currentPassword`, `newPassword`).
