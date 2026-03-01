@@ -1,32 +1,30 @@
 import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 
-import { PrismaService } from '../../common/prisma.service';
-import { ListingsService } from './listings.service';
+import { PrismaService } from '../prisma.service';
+import { ReliabilityService } from './reliability.service';
 
-describe('ListingsService', () => {
-  let service: ListingsService;
+describe('ReliabilityService', () => {
+  let service: ReliabilityService;
 
   const prismaMock = {
-    swapListing: {
-      create: jest.fn(),
-      findMany: jest.fn(),
-      findFirst: jest.fn(),
+    user: {
+      findUnique: jest.fn(),
       update: jest.fn(),
+    },
+    reliabilityEvent: {
+      create: jest.fn(),
     },
   };
 
   const configMock = {
-    get: jest.fn((key: string) => {
-      if (key === 'LISTING_ACTIVE_TTL_HOURS') return 336;
-      return undefined;
-    }),
+    get: jest.fn(() => undefined),
   };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
-        ListingsService,
+        ReliabilityService,
         {
           provide: PrismaService,
           useValue: prismaMock,
@@ -38,7 +36,7 @@ describe('ListingsService', () => {
       ],
     }).compile();
 
-    service = module.get<ListingsService>(ListingsService);
+    service = module.get<ReliabilityService>(ReliabilityService);
   });
 
   it('should be defined', () => {

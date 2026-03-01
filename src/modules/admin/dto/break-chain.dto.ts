@@ -1,4 +1,4 @@
-import { IsEnum, IsOptional } from 'class-validator';
+import { IsEnum, IsOptional, IsUUID } from 'class-validator';
 
 export enum AdminBreakReason {
   ADMIN_FORCE = 'ADMIN_FORCE',
@@ -11,4 +11,8 @@ export class BreakChainDto {
   @IsOptional()
   @IsEnum(AdminBreakReason)
   reason?: AdminBreakReason;
+
+  @IsOptional()
+  @IsUUID()
+  offenderUserId?: string;
 }

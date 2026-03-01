@@ -17,6 +17,34 @@ function asPositiveInt(value: unknown, key: string, fallback?: number): number {
   return parsed;
 }
 
+function asBoolean(value: unknown, fallback = false): boolean {
+  const stringValue = asString(value);
+  if (!stringValue) {
+    return fallback;
+  }
+
+  if (['1', 'true', 'yes', 'on'].includes(stringValue.toLowerCase())) {
+    return true;
+  }
+  if (['0', 'false', 'no', 'off'].includes(stringValue.toLowerCase())) {
+    return false;
+  }
+
+  throw new Error('Boolean environment variables must be true/false');
+}
+
+function asCsvList(value: unknown): string[] {
+  const stringValue = asString(value);
+  if (!stringValue) {
+    return [];
+  }
+
+  return stringValue
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 function assertJwtExpiresIn(value: string): void {
   const valid = /^\d+[smhd]$/.test(value);
   if (!valid) {
@@ -128,6 +156,86 @@ export function validateEnv(config: RawEnv): RawEnv {
       config.INTEREST_EXPIRE_SWEEP_LIMIT,
       'INTEREST_EXPIRE_SWEEP_LIMIT',
       100,
+    ),
+    LISTING_ACTIVE_TTL_HOURS: asPositiveInt(
+      config.LISTING_ACTIVE_TTL_HOURS,
+      'LISTING_ACTIVE_TTL_HOURS',
+      336,
+    ),
+    LISTING_EXPIRE_SWEEP_LIMIT: asPositiveInt(
+      config.LISTING_EXPIRE_SWEEP_LIMIT,
+      'LISTING_EXPIRE_SWEEP_LIMIT',
+      100,
+    ),
+    INTEREST_MAX_OPEN_PER_REQUESTER: asPositiveInt(
+      config.INTEREST_MAX_OPEN_PER_REQUESTER,
+      'INTEREST_MAX_OPEN_PER_REQUESTER',
+      25,
+    ),
+    INTEREST_MAX_DAILY_REQUESTS: asPositiveInt(
+      config.INTEREST_MAX_DAILY_REQUESTS,
+      'INTEREST_MAX_DAILY_REQUESTS',
+      50,
+    ),
+    SUBSCRIPTION_ENFORCEMENT: asBoolean(
+      config.SUBSCRIPTION_ENFORCEMENT,
+      false,
+    ),
+    TESTER_ALLOWLIST: asCsvList(config.TESTER_ALLOWLIST),
+    PAYMENT_PROVIDER: asString(config.PAYMENT_PROVIDER) ?? 'manual',
+    PAYMENT_WEBHOOK_SECRET:
+      asString(config.PAYMENT_WEBHOOK_SECRET) ?? 'dev-webhook-secret',
+    SUBSCRIPTION_DEFAULT_PLAN:
+      asString(config.SUBSCRIPTION_DEFAULT_PLAN) ?? 'basic_monthly',
+    SUBSCRIPTION_DEFAULT_AMOUNT_MINOR: asPositiveInt(
+      config.SUBSCRIPTION_DEFAULT_AMOUNT_MINOR,
+      'SUBSCRIPTION_DEFAULT_AMOUNT_MINOR',
+      5000,
+    ),
+    SUBSCRIPTION_DEFAULT_DURATION_DAYS: asPositiveInt(
+      config.SUBSCRIPTION_DEFAULT_DURATION_DAYS,
+      'SUBSCRIPTION_DEFAULT_DURATION_DAYS',
+      30,
+    ),
+    RELIABILITY_CANCEL_SCORE_PENALTY: asPositiveInt(
+      config.RELIABILITY_CANCEL_SCORE_PENALTY,
+      'RELIABILITY_CANCEL_SCORE_PENALTY',
+      5,
+    ),
+    RELIABILITY_NOSHOW_SCORE_PENALTY: asPositiveInt(
+      config.RELIABILITY_NOSHOW_SCORE_PENALTY,
+      'RELIABILITY_NOSHOW_SCORE_PENALTY',
+      15,
+    ),
+    RELIABILITY_MANUAL_SCORE_PENALTY: asPositiveInt(
+      config.RELIABILITY_MANUAL_SCORE_PENALTY,
+      'RELIABILITY_MANUAL_SCORE_PENALTY',
+      10,
+    ),
+    RELIABILITY_COOLDOWN_AFTER_CANCELLATIONS: asPositiveInt(
+      config.RELIABILITY_COOLDOWN_AFTER_CANCELLATIONS,
+      'RELIABILITY_COOLDOWN_AFTER_CANCELLATIONS',
+      3,
+    ),
+    RELIABILITY_COOLDOWN_HOURS: asPositiveInt(
+      config.RELIABILITY_COOLDOWN_HOURS,
+      'RELIABILITY_COOLDOWN_HOURS',
+      24,
+    ),
+    RELIABILITY_BLOCK_AFTER_NOSHOWS: asPositiveInt(
+      config.RELIABILITY_BLOCK_AFTER_NOSHOWS,
+      'RELIABILITY_BLOCK_AFTER_NOSHOWS',
+      2,
+    ),
+    RELIABILITY_BLOCK_HOURS: asPositiveInt(
+      config.RELIABILITY_BLOCK_HOURS,
+      'RELIABILITY_BLOCK_HOURS',
+      72,
+    ),
+    RELIABILITY_RANK_PENALTY_WEIGHT: asPositiveInt(
+      config.RELIABILITY_RANK_PENALTY_WEIGHT,
+      'RELIABILITY_RANK_PENALTY_WEIGHT',
+      25,
     ),
   };
 }

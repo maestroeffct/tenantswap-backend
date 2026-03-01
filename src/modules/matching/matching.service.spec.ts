@@ -2,6 +2,7 @@ import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 
 import { PrismaService } from '../../common/prisma.service';
+import { ReliabilityService } from '../../common/services/reliability.service';
 import { AiService } from './ai.service';
 import { MatchingService } from './matching.service';
 import { NotificationService } from './notification.service';
@@ -12,6 +13,7 @@ describe('MatchingService', () => {
   const prismaMock = {
     user: {
       findUnique: jest.fn(),
+      findMany: jest.fn(),
     },
     userNotification: {
       createMany: jest.fn(),
@@ -21,8 +23,10 @@ describe('MatchingService', () => {
       findUnique: jest.fn(),
       findMany: jest.fn(),
       update: jest.fn(),
+      updateMany: jest.fn(),
     },
     listingInterest: {
+      count: jest.fn(),
       upsert: jest.fn(),
       findMany: jest.fn(),
       findUnique: jest.fn(),
@@ -63,20 +67,35 @@ describe('MatchingService', () => {
     notifyMany: jest.fn(() => Promise.resolve()),
   };
 
+  const reliabilityServiceMock = {
+    recordCancellation: jest.fn(() => Promise.resolve()),
+    recordNoShow: jest.fn(() => Promise.resolve()),
+  };
+
   const configServiceMock = {
     get: jest.fn((key: string) => {
       if (key === 'CHAIN_ACCEPT_TTL_HOURS') return 24;
       if (key === 'CHAIN_EXPIRE_SWEEP_LIMIT') return 50;
       if (key === 'INTEREST_REQUEST_TTL_HOURS') return 48;
       if (key === 'INTEREST_EXPIRE_SWEEP_LIMIT') return 100;
+      if (key === 'LISTING_ACTIVE_TTL_HOURS') return 336;
+      if (key === 'LISTING_EXPIRE_SWEEP_LIMIT') return 100;
+      if (key === 'INTEREST_MAX_OPEN_PER_REQUESTER') return 25;
+      if (key === 'INTEREST_MAX_DAILY_REQUESTS') return 50;
+      if (key === 'RELIABILITY_RANK_PENALTY_WEIGHT') return 25;
       return undefined;
     }),
   };
 
   beforeEach(async () => {
     jest.clearAllMocks();
+
     prismaMock.swapChain.findMany.mockResolvedValue([]);
     prismaMock.listingInterest.findMany.mockResolvedValue([]);
+    prismaMock.swapListing.findMany.mockResolvedValue([]);
+    prismaMock.swapListing.updateMany.mockResolvedValue({ count: 0 });
+    prismaMock.user.findMany.mockResolvedValue([]);
+    prismaMock.listingInterest.count.mockResolvedValue(0);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -92,6 +111,10 @@ describe('MatchingService', () => {
         {
           provide: NotificationService,
           useValue: notificationServiceMock,
+        },
+        {
+          provide: ReliabilityService,
+          useValue: reliabilityServiceMock,
         },
         {
           provide: ConfigService,
@@ -121,6 +144,7 @@ describe('MatchingService', () => {
       currentRent: 700,
       availableOn: new Date('2026-03-01T00:00:00.000Z'),
       features: ['parking', 'security'],
+      expiresAt: new Date('2026-03-08T00:00:00.000Z'),
     };
 
     const listingB = {
@@ -136,6 +160,7 @@ describe('MatchingService', () => {
       currentRent: 900,
       availableOn: new Date('2026-03-08T00:00:00.000Z'),
       features: ['security', 'balcony'],
+      expiresAt: new Date('2026-03-15T00:00:00.000Z'),
     };
 
     prismaMock.swapListing.findUnique.mockResolvedValue(listingA);
@@ -175,7 +200,9 @@ describe('MatchingService', () => {
       ],
     });
 
-    const result = await service.runForListing('A', 'user-A');
+    const result = await service.runForListing('A', 'user-A', {
+      skipExpireSweep: true,
+    });
 
     expect(result.found).toBe(true);
     expect(result.badge).toBe('DIRECT');
@@ -201,6 +228,7 @@ describe('MatchingService', () => {
       currentRent: 650,
       availableOn: new Date('2026-03-01T00:00:00.000Z'),
       features: ['parking', 'security'],
+      expiresAt: new Date('2026-03-08T00:00:00.000Z'),
     };
 
     const listingB = {
@@ -216,6 +244,7 @@ describe('MatchingService', () => {
       currentRent: 1100,
       availableOn: new Date('2026-03-12T00:00:00.000Z'),
       features: ['security'],
+      expiresAt: new Date('2026-03-20T00:00:00.000Z'),
     };
 
     const listingC = {
@@ -231,6 +260,7 @@ describe('MatchingService', () => {
       currentRent: 1300,
       availableOn: new Date('2026-03-20T00:00:00.000Z'),
       features: ['parking'],
+      expiresAt: new Date('2026-03-30T00:00:00.000Z'),
     };
 
     prismaMock.swapListing.findUnique.mockResolvedValue(listingA);
@@ -244,7 +274,9 @@ describe('MatchingService', () => {
     );
     prismaMock.$transaction.mockResolvedValue([]);
 
-    const result = await service.runForListing('A', 'user-A');
+    const result = await service.runForListing('A', 'user-A', {
+      skipExpireSweep: true,
+    });
 
     expect(result.found).toBe(false);
     expect(result.matchScenario).toBe('ONE_TO_MANY');
@@ -269,12 +301,15 @@ describe('MatchingService', () => {
       currentRent: 700,
       availableOn: new Date('2026-03-01T00:00:00.000Z'),
       features: ['parking'],
+      expiresAt: new Date('2026-03-08T00:00:00.000Z'),
     };
 
     prismaMock.swapListing.findUnique.mockResolvedValue(listingA);
     prismaMock.swapListing.findMany.mockResolvedValue([listingA]);
 
-    const result = await service.runForListing('A', 'user-A');
+    const result = await service.runForListing('A', 'user-A', {
+      skipExpireSweep: true,
+    });
 
     expect(result.found).toBe(false);
     expect(result.matchScenario).toBe('INDEPENDENT');
@@ -297,6 +332,7 @@ describe('MatchingService', () => {
       currentRent: 1000,
       availableOn: new Date('2026-03-14T00:00:00.000Z'),
       features: ['security'],
+      expiresAt: new Date('2026-03-14T00:00:00.000Z'),
       user: {
         id: 'owner-1',
         fullName: 'Owner One',
@@ -317,6 +353,7 @@ describe('MatchingService', () => {
       currentRent: 700,
       availableOn: new Date('2026-03-01T00:00:00.000Z'),
       features: ['parking'],
+      expiresAt: new Date('2026-03-08T00:00:00.000Z'),
       user: {
         id: 'requester-1',
         fullName: 'Requester One',
@@ -324,6 +361,7 @@ describe('MatchingService', () => {
       },
     };
 
+    prismaMock.swapListing.findMany.mockResolvedValue([]);
     prismaMock.swapListing.findUnique.mockResolvedValue(targetListing);
     prismaMock.swapListing.findFirst.mockResolvedValue(requesterListing);
     prismaMock.listingInterest.upsert.mockResolvedValue({
@@ -334,10 +372,7 @@ describe('MatchingService', () => {
       expiresAt: new Date('2026-03-03T00:00:00.000Z'),
     });
 
-    const result = await service.requestInterest(
-      targetListing.id,
-      'requester-1',
-    );
+    const result = await service.requestInterest(targetListing.id, 'requester-1');
 
     expect(result.success).toBe(true);
     expect(result.interest.status).toBe('REQUESTED');

@@ -14,6 +14,7 @@ import { UsersModule } from './modules/users/users.module';
 import { ListingsModule } from './modules/listings/listings.module';
 import { MatchingModule } from './modules/matching/matching.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { BillingModule } from './modules/billing/billing.module';
 import { validateEnv } from './config/env.validation';
 
 @Module({
@@ -44,6 +45,7 @@ import { validateEnv } from './config/env.validation';
     ListingsModule,
     MatchingModule,
     AdminModule,
+    BillingModule,
   ],
   providers: [
     {

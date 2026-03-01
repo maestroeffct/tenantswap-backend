@@ -1,5 +1,7 @@
 import {
   BadRequestException,
+  HttpException,
+  HttpStatus,
   Injectable,
   Logger,
   UnauthorizedException,
@@ -12,6 +14,7 @@ import type {
 } from '@prisma/client';
 
 import { PrismaService } from '../../common/prisma.service';
+import { ReliabilityService } from '../../common/services/reliability.service';
 import { AiService } from './ai.service';
 import { NotificationService } from './notification.service';
 
@@ -22,6 +25,7 @@ type Edge = {
   budgetScore: number;
   timelineScore: number;
   featureScore: number;
+  reliabilityPenalty: number;
   reciprocityBonus: number;
   rankScore: number;
   isMutual: boolean;
@@ -40,6 +44,7 @@ type ListingNode = {
   currentRent: number;
   availableOn: Date;
   features: string[];
+  reliabilityScore: number;
 };
 
 type Recommendation = {
@@ -59,6 +64,7 @@ type Recommendation = {
     budget: number;
     timeline: number;
     features: number;
+    reliabilityPenalty: number;
     reciprocityBonus: number;
   };
 };
@@ -109,6 +115,32 @@ type RerunSummary = {
   failed: number;
 };
 
+type ConfirmedByRole = 'LISTER' | 'WANTER' | 'ADMIN';
+
+type InterestForConfirmation = {
+  id: string;
+  listingId: string;
+  requesterListingId: string;
+  requesterUserId: string;
+  status: ListingInterestStatus;
+  listing: {
+    userId: string;
+    user: {
+      id: string;
+      fullName: string;
+      phone: string;
+    };
+  };
+  requesterListing: {
+    userId: string;
+    user: {
+      id: string;
+      fullName: string;
+      phone: string;
+    };
+  };
+};
+
 const OPEN_INTEREST_STATUSES: ListingInterestStatus[] = [
   'REQUESTED',
   'CONTACT_APPROVED',
@@ -121,11 +153,17 @@ export class MatchingService {
   private readonly chainExpireSweepLimit: number;
   private readonly interestRequestTtlHours: number;
   private readonly interestExpireSweepLimit: number;
+  private readonly listingActiveTtlHours: number;
+  private readonly listingExpireSweepLimit: number;
+  private readonly interestMaxOpenPerRequester: number;
+  private readonly interestMaxDailyRequests: number;
+  private readonly reliabilityRankPenaltyWeight: number;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly aiService: AiService,
     private readonly notificationService: NotificationService,
+    private readonly reliabilityService: ReliabilityService,
     private readonly config: ConfigService,
   ) {
     this.chainAcceptTtlHours =
@@ -136,6 +174,16 @@ export class MatchingService {
       this.config.get<number>('INTEREST_REQUEST_TTL_HOURS') ?? 48;
     this.interestExpireSweepLimit =
       this.config.get<number>('INTEREST_EXPIRE_SWEEP_LIMIT') ?? 100;
+    this.listingActiveTtlHours =
+      this.config.get<number>('LISTING_ACTIVE_TTL_HOURS') ?? 336;
+    this.listingExpireSweepLimit =
+      this.config.get<number>('LISTING_EXPIRE_SWEEP_LIMIT') ?? 100;
+    this.interestMaxOpenPerRequester =
+      this.config.get<number>('INTEREST_MAX_OPEN_PER_REQUESTER') ?? 25;
+    this.interestMaxDailyRequests =
+      this.config.get<number>('INTEREST_MAX_DAILY_REQUESTS') ?? 50;
+    this.reliabilityRankPenaltyWeight =
+      this.config.get<number>('RELIABILITY_RANK_PENALTY_WEIGHT') ?? 25;
   }
 
   /* ---------------------------- scoring ---------------------------- */
@@ -213,15 +261,25 @@ export class MatchingService {
     return Math.round(5 * ratio);
   }
 
+
+  private computeReliabilityPenalty(reliabilityScore: number) {
+    const clampedScore = Math.max(0, Math.min(100, reliabilityScore));
+    const deficit = 100 - clampedScore;
+    return Math.round((deficit / 100) * this.reliabilityRankPenaltyWeight);
+  }
+
   private computeScore(a: ListingNode, b: ListingNode) {
     const cityScore = this.computeLocationScore(a.desiredCity, b.currentCity);
     const typeScore = this.computeTypeScore(a.desiredType, b.currentType);
     const budgetScore = this.computeBudgetScore(a.maxBudget, b.currentRent);
     const timelineScore = this.computeTimelineScore(a, b);
     const featureScore = this.computeFeatureScore(a, b);
+    const reliabilityPenalty = this.computeReliabilityPenalty(
+      b.reliabilityScore,
+    );
 
     const totalScore =
-      cityScore + typeScore + budgetScore + timelineScore + featureScore;
+      cityScore + typeScore + budgetScore + timelineScore + featureScore - reliabilityPenalty;
 
     return {
       cityScore,
@@ -229,10 +287,11 @@ export class MatchingService {
       budgetScore,
       timelineScore,
       featureScore,
+      reliabilityPenalty,
       reciprocityBonus: 0,
-      rankScore: Math.min(100, totalScore),
+      rankScore: Math.max(0, Math.min(100, totalScore)),
       isMutual: false,
-      totalScore: Math.min(100, totalScore),
+      totalScore: Math.max(0, Math.min(100, totalScore)),
     };
   }
 
@@ -402,6 +461,7 @@ export class MatchingService {
           budget: candidate.budgetScore,
           timeline: candidate.timelineScore,
           features: candidate.featureScore,
+          reliabilityPenalty: candidate.reliabilityPenalty,
           reciprocityBonus: candidate.reciprocityBonus,
         },
       };
@@ -415,6 +475,7 @@ export class MatchingService {
       return;
     }
 
+    await this.expireListings('REQUEST');
     await this.expirePendingChains('REQUEST');
     await this.expireListingInterests('REQUEST');
   }
@@ -427,6 +488,18 @@ export class MatchingService {
   private computeInterestExpiresAt() {
     const durationMs = this.interestRequestTtlHours * 60 * 60 * 1000;
     return new Date(Date.now() + durationMs);
+  }
+
+  private computeListingExpiresAt(from = new Date()) {
+    const durationMs = this.listingActiveTtlHours * 60 * 60 * 1000;
+    return new Date(from.getTime() + durationMs);
+  }
+
+  private getStartOfCurrentUtcDay() {
+    const now = new Date();
+    return new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+    );
   }
 
   private async rerunListingsForMembers(
@@ -596,6 +669,179 @@ export class MatchingService {
     return {
       affectedChains: chainIds.length,
       brokenChains,
+    };
+  }
+
+  async expireListings(trigger: SweepTrigger) {
+    const now = new Date();
+
+    const expiredListings = await this.prisma.swapListing.findMany({
+      where: {
+        status: 'ACTIVE',
+        expiresAt: {
+          lt: now,
+        },
+      },
+      orderBy: {
+        expiresAt: 'asc',
+      },
+      take: this.listingExpireSweepLimit,
+      select: {
+        id: true,
+        userId: true,
+      },
+    });
+
+    let expiredCount = 0;
+    let releasedInterests = 0;
+    let rerunTriggered = 0;
+
+    for (const listing of expiredListings) {
+      const closed = await this.prisma.swapListing.updateMany({
+        where: {
+          id: listing.id,
+          status: 'ACTIVE',
+          expiresAt: {
+            lt: now,
+          },
+        },
+        data: {
+          status: 'CLOSED',
+          closeReason: 'EXPIRED',
+          closedAt: now,
+          expiresAt: null,
+        },
+      });
+
+      if (closed.count === 0) {
+        continue;
+      }
+
+      expiredCount += 1;
+
+      const staleInterests = await this.prisma.listingInterest.findMany({
+        where: {
+          OR: [
+            { listingId: listing.id },
+            { requesterListingId: listing.id },
+          ],
+          status: {
+            in: OPEN_INTEREST_STATUSES,
+          },
+        },
+        select: {
+          id: true,
+          requesterUserId: true,
+          requesterListingId: true,
+          listing: {
+            select: {
+              userId: true,
+            },
+          },
+        },
+      });
+
+      if (staleInterests.length === 0) {
+        await this.notificationService.notifyMany([
+          {
+            userId: listing.userId,
+            type: 'LISTING_EXPIRED',
+            title: 'Listing Expired',
+            message:
+              'Your listing expired. Renew it to continue receiving requests.',
+            payload: {
+              listingId: listing.id,
+            },
+          },
+        ]);
+        continue;
+      }
+
+      const staleInterestIds = staleInterests.map((interest) => interest.id);
+      const released = await this.prisma.listingInterest.updateMany({
+        where: {
+          id: {
+            in: staleInterestIds,
+          },
+          status: {
+            in: OPEN_INTEREST_STATUSES,
+          },
+        },
+        data: {
+          status: 'EXPIRED',
+          respondedAt: now,
+          releasedAt: now,
+          expiresAt: null,
+        },
+      });
+
+      releasedInterests += released.count;
+
+      const rerunListingIds = [
+        ...new Set(
+          staleInterests
+            .map((interest) => interest.requesterListingId)
+            .filter((item) => item !== listing.id),
+        ),
+      ];
+
+      if (rerunListingIds.length > 0) {
+        const rerun = await this.rerunListingsForMembers(
+          rerunListingIds,
+          `listing-expired:${listing.id}`,
+        );
+        rerunTriggered += rerun.triggered;
+      }
+
+      const notifications = [
+        {
+          userId: listing.userId,
+          type: 'LISTING_EXPIRED',
+          title: 'Listing Expired',
+          message:
+            'Your listing expired and open requests were released automatically.',
+          payload: {
+            listingId: listing.id,
+            releasedCount: released.count,
+          },
+        },
+        ...staleInterests.map((interest) => ({
+          userId: interest.requesterUserId,
+          type: 'REQUEST_RELEASED',
+          title: 'Request Released',
+          message:
+            'This listing is no longer active. Your request was released and matching reran.',
+          payload: {
+            listingId: listing.id,
+          },
+        })),
+        ...staleInterests.map((interest) => ({
+          userId: interest.listing.userId,
+          type: 'REQUEST_RELEASED',
+          title: 'Request Released',
+          message:
+            'A related request was released because one listing expired.',
+          payload: {
+            listingId: listing.id,
+          },
+        })),
+      ];
+
+      await this.notificationService.notifyMany(notifications);
+    }
+
+    if (expiredCount > 0) {
+      this.logger.warn(
+        `[LISTING_EXPIRE_SWEEP] trigger=${trigger} expiredListings=${expiredCount} releasedInterests=${releasedInterests} rerunTriggered=${rerunTriggered}`,
+      );
+    }
+
+    return {
+      trigger,
+      checked: expiredListings.length,
+      expiredListings: expiredCount,
+      releasedInterests,
+      rerunTriggered,
     };
   }
 
@@ -836,8 +1082,14 @@ export class MatchingService {
   async runForUser(userId: string, options?: RunOptions) {
     await this.sweepLifecycle(Boolean(options?.skipExpireSweep));
 
+    const now = new Date();
+
     const myListing = await this.prisma.swapListing.findFirst({
-      where: { userId, status: 'ACTIVE' },
+      where: {
+        userId,
+        status: 'ACTIVE',
+        OR: [{ expiresAt: null }, { expiresAt: { gte: now } }],
+      },
       orderBy: { createdAt: 'desc' },
     });
 
@@ -863,6 +1115,7 @@ export class MatchingService {
         id: true,
         userId: true,
         status: true,
+        expiresAt: true,
         desiredCity: true,
         desiredType: true,
         maxBudget: true,
@@ -886,8 +1139,29 @@ export class MatchingService {
       throw new BadRequestException('Listing must be ACTIVE to run matching');
     }
 
-    const listings = await this.prisma.swapListing.findMany({
-      where: { status: 'ACTIVE' },
+    const now = new Date();
+    if (listing.expiresAt && listing.expiresAt.getTime() < now.getTime()) {
+      await this.prisma.swapListing.updateMany({
+        where: {
+          id: listing.id,
+          status: 'ACTIVE',
+        },
+        data: {
+          status: 'CLOSED',
+          closeReason: 'EXPIRED',
+          closedAt: now,
+          expiresAt: null,
+        },
+      });
+
+      throw new BadRequestException('Listing expired. Renew it before matching');
+    }
+
+    const listingRows = await this.prisma.swapListing.findMany({
+      where: {
+        status: 'ACTIVE',
+        OR: [{ expiresAt: null }, { expiresAt: { gte: now } }],
+      },
       select: {
         id: true,
         userId: true,
@@ -902,6 +1176,27 @@ export class MatchingService {
         features: true,
       },
     });
+
+    const reliabilityRows = await this.prisma.user.findMany({
+      where: {
+        id: {
+          in: [...new Set(listingRows.map((item) => item.userId))],
+        },
+      },
+      select: {
+        id: true,
+        reliabilityScore: true,
+      },
+    });
+
+    const reliabilityByUserId = new Map(
+      reliabilityRows.map((item) => [item.id, item.reliabilityScore] as const),
+    );
+
+    const listings: ListingNode[] = listingRows.map((item) => ({
+      ...item,
+      reliabilityScore: reliabilityByUserId.get(item.userId) ?? 100,
+    }));
 
     const graph = this.buildGraph(listings);
     const listingById = new Map(
@@ -1178,6 +1473,8 @@ export class MatchingService {
   ) {
     await this.sweepLifecycle();
 
+    const now = new Date();
+
     const targetListing = await this.prisma.swapListing.findUnique({
       where: { id: targetListingId },
       include: {
@@ -1199,8 +1496,44 @@ export class MatchingService {
       throw new BadRequestException('Target listing is no longer active');
     }
 
+    if (targetListing.expiresAt && targetListing.expiresAt.getTime() < now.getTime()) {
+      throw new BadRequestException('Target listing has expired');
+    }
+
     if (targetListing.userId === requesterUserId) {
       throw new BadRequestException('You cannot request your own listing');
+    }
+
+    const openRequestCount = await this.prisma.listingInterest.count({
+      where: {
+        requesterUserId,
+        status: {
+          in: OPEN_INTEREST_STATUSES,
+        },
+      },
+    });
+
+    if (openRequestCount >= this.interestMaxOpenPerRequester) {
+      throw new HttpException(
+        `You already have ${openRequestCount} open requests. Resolve existing requests before creating more.`,
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    const todayRequestCount = await this.prisma.listingInterest.count({
+      where: {
+        requesterUserId,
+        createdAt: {
+          gte: this.getStartOfCurrentUtcDay(),
+        },
+      },
+    });
+
+    if (todayRequestCount >= this.interestMaxDailyRequests) {
+      throw new HttpException(
+        `Daily request limit reached (${this.interestMaxDailyRequests}). Try again tomorrow.`,
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
     }
 
     const requesterListing = requesterListingId
@@ -1209,6 +1542,7 @@ export class MatchingService {
             id: requesterListingId,
             userId: requesterUserId,
             status: 'ACTIVE',
+            OR: [{ expiresAt: null }, { expiresAt: { gte: now } }],
           },
           include: {
             user: {
@@ -1224,6 +1558,7 @@ export class MatchingService {
           where: {
             userId: requesterUserId,
             status: 'ACTIVE',
+            OR: [{ expiresAt: null }, { expiresAt: { gte: now } }],
           },
           orderBy: { createdAt: 'desc' },
           include: {
@@ -1259,6 +1594,7 @@ export class MatchingService {
       currentRent: requesterListing.currentRent,
       availableOn: requesterListing.availableOn,
       features: requesterListing.features,
+      reliabilityScore: 100,
     };
 
     const targetNode: ListingNode = {
@@ -1273,6 +1609,7 @@ export class MatchingService {
       currentRent: targetListing.currentRent,
       availableOn: targetListing.availableOn,
       features: targetListing.features,
+      reliabilityScore: 100,
     };
 
     if (!this.isEdgeCompatible(requesterNode, targetNode)) {
@@ -1297,6 +1634,8 @@ export class MatchingService {
         respondedAt: null,
         releasedAt: null,
         confirmedAt: null,
+        confirmedByUserId: null,
+        confirmedByRole: null,
       },
       create: {
         listingId: targetListing.id,
@@ -1713,14 +2052,20 @@ export class MatchingService {
     };
   }
 
-  async confirmRenter(interestId: string, ownerUserId: string) {
-    await this.sweepLifecycle();
-
-    const interest = await this.prisma.listingInterest.findUnique({
+  private async getInterestForConfirmation(
+    interestId: string,
+  ): Promise<InterestForConfirmation | null> {
+    return this.prisma.listingInterest.findUnique({
       where: { id: interestId },
-      include: {
+      select: {
+        id: true,
+        listingId: true,
+        requesterListingId: true,
+        requesterUserId: true,
+        status: true,
         listing: {
-          include: {
+          select: {
+            userId: true,
             user: {
               select: {
                 id: true,
@@ -1731,7 +2076,8 @@ export class MatchingService {
           },
         },
         requesterListing: {
-          include: {
+          select: {
+            userId: true,
             user: {
               select: {
                 id: true,
@@ -1743,32 +2089,16 @@ export class MatchingService {
         },
       },
     });
+  }
 
-    if (!interest) {
-      throw new BadRequestException('Interest request not found');
-    }
-
-    if (interest.listing.userId !== ownerUserId) {
-      throw new UnauthorizedException(
-        'You can only confirm renter for your own listing',
-      );
-    }
-
-    if (interest.status === 'CONFIRMED_RENTER') {
-      return {
-        success: true,
-        status: interest.status,
-        releasedCount: 0,
-      };
-    }
-
-    if (!OPEN_INTEREST_STATUSES.includes(interest.status)) {
-      throw new BadRequestException(
-        `This request cannot be confirmed from status ${interest.status}`,
-      );
-    }
-
+  private async finalizeInterestConfirmation(
+    interest: InterestForConfirmation,
+    confirmedByUserId: string,
+    confirmedByRole: ConfirmedByRole,
+  ) {
     const now = new Date();
+    const closeReason =
+      confirmedByRole === 'WANTER' ? 'REQUESTER_CONFIRMED' : 'MATCH_CONFIRMED';
 
     const transition = await this.prisma.$transaction(async (tx) => {
       const releasedOnTarget = await tx.listingInterest.findMany({
@@ -1802,6 +2132,8 @@ export class MatchingService {
         data: {
           status: 'CONFIRMED_RENTER',
           confirmedAt: now,
+          confirmedByUserId,
+          confirmedByRole,
           respondedAt: now,
           releasedAt: null,
           expiresAt: null,
@@ -1814,6 +2146,10 @@ export class MatchingService {
           status: 'MATCHED',
           matchedInterestId: interest.id,
           matchedAt: now,
+          expiresAt: null,
+          closedAt: now,
+          closeReason,
+          closedByUserId: confirmedByUserId,
         },
       });
 
@@ -1821,7 +2157,12 @@ export class MatchingService {
         where: { id: interest.requesterListingId },
         data: {
           status: 'MATCHED',
+          matchedInterestId: interest.id,
           matchedAt: now,
+          expiresAt: null,
+          closedAt: now,
+          closeReason,
+          closedByUserId: confirmedByUserId,
         },
       });
 
@@ -1884,26 +2225,38 @@ export class MatchingService {
 
     const releasedEntries = [...releasedMap.values()];
 
+    const ownerMessage =
+      confirmedByRole === 'WANTER'
+        ? `${interest.requesterListing.user.fullName} reported they have taken your apartment.`
+        : `You confirmed ${interest.requesterListing.user.fullName} as renter for this listing.`;
+
+    const requesterMessage =
+      confirmedByRole === 'WANTER'
+        ? 'You confirmed that you have secured this apartment.'
+        : `${interest.listing.user.fullName} confirmed you as renter for the apartment.`;
+
     await this.notificationService.notifyMany([
       {
-        userId: ownerUserId,
+        userId: interest.listing.userId,
         type: 'RENTER_CONFIRMED',
-        title: 'Confirmed Renter',
-        message: `You confirmed ${interest.requesterListing.user.fullName} as renter for this listing.`,
+        title: 'Apartment Confirmed',
+        message: ownerMessage,
         payload: {
           interestId: interest.id,
           listingId: interest.listingId,
+          confirmedByRole,
         },
       },
       {
         userId: interest.requesterUserId,
         type: 'RENTER_CONFIRMED',
         title: 'Apartment Confirmed',
-        message: `${interest.listing.user.fullName} confirmed you as renter for the apartment.`,
+        message: requesterMessage,
         payload: {
           interestId: interest.id,
           listingId: interest.listingId,
           ownerPhone: interest.listing.user.phone,
+          confirmedByRole,
         },
       },
       ...releasedEntries.map((released) => ({
@@ -1936,7 +2289,7 @@ export class MatchingService {
     const chainConflict = await this.breakChainsForListings(
       [interest.listingId, interest.requesterListingId],
       'SYSTEM',
-      ownerUserId,
+      confirmedByUserId,
     );
 
     return {
@@ -1945,7 +2298,72 @@ export class MatchingService {
       releasedCount: releasedEntries.length,
       rerun,
       chainConflict,
+      confirmedByRole,
     };
+  }
+
+  async confirmRenter(interestId: string, ownerUserId: string) {
+    await this.sweepLifecycle();
+
+    const interest = await this.getInterestForConfirmation(interestId);
+
+    if (!interest) {
+      throw new BadRequestException('Interest request not found');
+    }
+
+    if (interest.listing.userId !== ownerUserId) {
+      throw new UnauthorizedException(
+        'You can only confirm renter for your own listing',
+      );
+    }
+
+    if (interest.status === 'CONFIRMED_RENTER') {
+      return {
+        success: true,
+        status: interest.status,
+        releasedCount: 0,
+      };
+    }
+
+    if (!OPEN_INTEREST_STATUSES.includes(interest.status)) {
+      throw new BadRequestException(
+        `This request cannot be confirmed from status ${interest.status}`,
+      );
+    }
+
+    return this.finalizeInterestConfirmation(interest, ownerUserId, 'LISTER');
+  }
+
+  async confirmTakenByRequester(interestId: string, requesterUserId: string) {
+    await this.sweepLifecycle();
+
+    const interest = await this.getInterestForConfirmation(interestId);
+
+    if (!interest) {
+      throw new BadRequestException('Interest request not found');
+    }
+
+    if (interest.requesterUserId !== requesterUserId) {
+      throw new UnauthorizedException(
+        'You can only confirm your own approved request',
+      );
+    }
+
+    if (interest.status === 'CONFIRMED_RENTER') {
+      return {
+        success: true,
+        status: interest.status,
+        releasedCount: 0,
+      };
+    }
+
+    if (interest.status !== 'CONTACT_APPROVED') {
+      throw new BadRequestException(
+        'You can only confirm after the listing owner approves contact',
+      );
+    }
+
+    return this.finalizeInterestConfirmation(interest, requesterUserId, 'WANTER');
   }
 
   /* ---------------------------- chain accept/decline ---------------------------- */
@@ -2043,6 +2461,13 @@ export class MatchingService {
       rerunMembers: true,
     });
 
+    await this.reliabilityService.recordCancellation(userId, {
+      reason: 'User declined a chain',
+      metadata: {
+        chainId,
+      },
+    });
+
     return {
       success: true,
       status: 'BROKEN',
@@ -2056,6 +2481,7 @@ export class MatchingService {
     chainId: string,
     adminUserId: string,
     reason: ChainBreakReason,
+    offenderUserId?: string,
   ) {
     const admin = await this.prisma.user.findUnique({
       where: { id: adminUserId },
@@ -2071,6 +2497,16 @@ export class MatchingService {
       actorUserId: adminUserId,
       rerunMembers: true,
     });
+
+    if (reason === 'NO_SHOW' && offenderUserId) {
+      await this.reliabilityService.recordNoShow(offenderUserId, adminUserId, {
+        reason: 'Admin marked user as no-show on chain break',
+        metadata: {
+          chainId,
+          reason,
+        },
+      });
+    }
 
     return {
       success: true,

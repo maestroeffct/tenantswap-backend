@@ -8,22 +8,37 @@ datasource db {
 }
 
 model User {
-  id                         String    @id @default(uuid())
-  role                       UserRole  @default(USER)
+  id                         String             @id @default(uuid())
+  role                       UserRole           @default(USER)
   fullName                   String
-  email                      String?   @unique
-  phone                      String    @unique
+  email                      String?            @unique
+  phone                      String             @unique
   password                   String
   emailVerifiedAt            DateTime?
   emailVerificationTokenHash String?
   emailVerificationExpiresAt DateTime?
-  createdAt                  DateTime  @default(now())
+  subscriptionStatus         SubscriptionStatus @default(INACTIVE)
+  subscriptionPlan           String?
+  subscriptionProvider       String?
+  subscriptionReference      String?
+  subscriptionStartedAt      DateTime?
+  subscriptionExpiresAt      DateTime?
+  reliabilityScore           Int                @default(100)
+  cancellationCount          Int                @default(0)
+  noShowCount                Int                @default(0)
+  cooldownUntil              DateTime?
+  blockedUntil               DateTime?
+  createdAt                  DateTime           @default(now())
 
-  listings           SwapListing[]
-  notifications      UserNotification[]
-  interestsRequested ListingInterest[] @relation("UserRequestedInterests")
+  listings            SwapListing[]
+  notifications       UserNotification[]
+  interestsRequested  ListingInterest[]    @relation("UserRequestedInterests")
+  paymentTransactions PaymentTransaction[]
+  reliabilityEvents   ReliabilityEvent[]
 
   @@index([emailVerificationTokenHash])
+  @@index([subscriptionStatus, subscriptionExpiresAt])
+  @@index([blockedUntil, cooldownUntil])
 }
 
 model SwapListing {
@@ -48,6 +63,10 @@ model SwapListing {
   // Interest-based matching metadata.
   matchedInterestId String?
   matchedAt         DateTime?
+  expiresAt         DateTime?
+  closedAt          DateTime?
+  closeReason       ListingCloseReason?
+  closedByUserId    String?
 
   createdAt DateTime @default(now())
 
@@ -56,6 +75,7 @@ model SwapListing {
   outgoingInterests ListingInterest[] @relation("ListingOutgoingInterests")
 
   @@index([matchedInterestId])
+  @@index([status, expiresAt])
 }
 
 enum UserRole {
@@ -68,6 +88,22 @@ enum ListingStatus {
   ACTIVE
   MATCHED
   CLOSED
+}
+
+enum ListingCloseReason {
+  MATCH_CONFIRMED
+  REQUESTER_CONFIRMED
+  OWNER_CLOSED
+  EXPIRED
+  ADMIN_CLOSED
+}
+
+enum SubscriptionStatus {
+  INACTIVE
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  EXPIRED
 }
 
 enum ChainStatus {
@@ -99,6 +135,19 @@ enum ListingInterestStatus {
   CONFIRMED_RENTER
 }
 
+enum InterestConfirmedBy {
+  LISTER
+  WANTER
+  ADMIN
+}
+
+enum ReliabilityEventType {
+  CANCELLATION
+  NO_SHOW
+  MANUAL_PENALTY
+  MANUAL_UNBLOCK
+}
+
 model MatchCandidate {
   id String @id @default(uuid())
 
@@ -117,26 +166,29 @@ model MatchCandidate {
 }
 
 model ListingInterest {
-  id               String               @id @default(uuid())
-  listingId        String
+  id                 String                @id @default(uuid())
+  listingId          String
   requesterListingId String
-  requesterUserId  String
-  status           ListingInterestStatus @default(REQUESTED)
-  expiresAt        DateTime?
-  respondedAt      DateTime?
-  releasedAt       DateTime?
-  confirmedAt      DateTime?
-  createdAt        DateTime             @default(now())
-  updatedAt        DateTime             @updatedAt
+  requesterUserId    String
+  status             ListingInterestStatus @default(REQUESTED)
+  expiresAt          DateTime?
+  respondedAt        DateTime?
+  releasedAt         DateTime?
+  confirmedAt        DateTime?
+  confirmedByUserId  String?
+  confirmedByRole    InterestConfirmedBy?
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
 
-  listing          SwapListing          @relation("ListingIncomingInterests", fields: [listingId], references: [id])
-  requesterListing SwapListing          @relation("ListingOutgoingInterests", fields: [requesterListingId], references: [id])
-  requesterUser    User                 @relation("UserRequestedInterests", fields: [requesterUserId], references: [id])
+  listing          SwapListing @relation("ListingIncomingInterests", fields: [listingId], references: [id])
+  requesterListing SwapListing @relation("ListingOutgoingInterests", fields: [requesterListingId], references: [id])
+  requesterUser    User        @relation("UserRequestedInterests", fields: [requesterUserId], references: [id])
 
   @@unique([listingId, requesterListingId])
   @@index([listingId, status, createdAt])
   @@index([requesterUserId, status, createdAt])
   @@index([status, expiresAt])
+  @@index([status, confirmedAt])
 }
 
 model SwapChain {
@@ -207,8 +259,70 @@ model ContactUnlockApproval {
   @@unique([contactUnlockId, approverUserId])
 }
 
+model ReliabilityEvent {
+  id            String               @id @default(uuid())
+  userId        String
+  actorUserId   String?
+  eventType     ReliabilityEventType
+  scoreDelta    Int                  @default(0)
+  reason        String?
+  metadata      Json?
+  cooldownUntil DateTime?
+  blockedUntil  DateTime?
+  createdAt     DateTime             @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+  @@index([eventType, createdAt])
+}
+
+model PaymentTransaction {
+  id                  String                   @id @default(uuid())
+  userId              String
+  provider            String
+  providerEventId     String?
+  providerReference   String                   @unique
+  amountMinor         Int
+  currency            String                   @default("NGN")
+  planCode            String?
+  status              PaymentTransactionStatus @default(PENDING)
+  paidAt              DateTime?
+  subscriptionStartAt DateTime?
+  subscriptionEndAt   DateTime?
+  metadata            Json?
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+}
+
+enum PaymentTransactionStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  CANCELED
+}
+
+model PaymentWebhookEvent {
+  id          String   @id @default(uuid())
+  provider    String
+  eventId     String
+  eventType   String
+  signature   String?
+  payload     Json
+  processedAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  @@unique([provider, eventId])
+  @@index([provider, eventType, createdAt])
+}
+
 model UserNotification {
-  id        String   @id @default(uuid())
+  id        String    @id @default(uuid())
   userId    String
   chainId   String?
   type      String
@@ -216,7 +330,7 @@ model UserNotification {
   message   String
   payload   Json?
   readAt    DateTime?
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id])
 

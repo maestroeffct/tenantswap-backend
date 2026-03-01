@@ -168,6 +168,13 @@ export class AuthService {
         email: true,
         password: true,
         emailVerifiedAt: true,
+        subscriptionStatus: true,
+        subscriptionExpiresAt: true,
+        reliabilityScore: true,
+        cancellationCount: true,
+        noShowCount: true,
+        cooldownUntil: true,
+        blockedUntil: true,
       },
     });
 
@@ -240,6 +247,13 @@ export class AuthService {
         fullName: user.fullName,
         phone: user.phone,
         email: user.email,
+        subscriptionStatus: user.subscriptionStatus,
+        subscriptionExpiresAt: user.subscriptionExpiresAt,
+        reliabilityScore: user.reliabilityScore,
+        cancellationCount: user.cancellationCount,
+        noShowCount: user.noShowCount,
+        cooldownUntil: user.cooldownUntil,
+        blockedUntil: user.blockedUntil,
       },
     };
   }
@@ -257,6 +271,13 @@ export class AuthService {
         fullName: true,
         phone: true,
         email: true,
+        subscriptionStatus: true,
+        subscriptionExpiresAt: true,
+        reliabilityScore: true,
+        cancellationCount: true,
+        noShowCount: true,
+        cooldownUntil: true,
+        blockedUntil: true,
       },
     });
 
