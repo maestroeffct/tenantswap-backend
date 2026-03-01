@@ -70,6 +70,18 @@
     {
       "key": "adminChainId",
       "value": ""
+    },
+    {
+      "key": "paymentReference",
+      "value": ""
+    },
+    {
+      "key": "userId",
+      "value": ""
+    },
+    {
+      "key": "offenderUserId",
+      "value": ""
     }
   ],
   "item": [
@@ -131,8 +143,9 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "let res = {};",
                   "let data = {};",
-                  "try { data = pm.response.json(); } catch (e) {}",
+                  "try { res = pm.response.json(); data = res.data || {}; } catch (e) {}",
                   "if (data.verificationToken) pm.collectionVariables.set('verificationToken', data.verificationToken);"
                 ]
               }
@@ -174,8 +187,9 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "let res = {};",
                   "let data = {};",
-                  "try { data = pm.response.json(); } catch (e) {}",
+                  "try { res = pm.response.json(); data = res.data || {}; } catch (e) {}",
                   "if (data.accessToken) pm.collectionVariables.set('accessToken', data.accessToken);"
                 ]
               }
@@ -217,8 +231,9 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "let res = {};",
                   "let data = {};",
-                  "try { data = pm.response.json(); } catch (e) {}",
+                  "try { res = pm.response.json(); data = res.data || {}; } catch (e) {}",
                   "if (data.verificationToken) pm.collectionVariables.set('verificationToken', data.verificationToken);"
                 ]
               }
@@ -260,9 +275,11 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "let res = {};",
                   "let data = {};",
-                  "try { data = pm.response.json(); } catch (e) {}",
-                  "if (data.accessToken) pm.collectionVariables.set('accessToken', data.accessToken);"
+                  "try { res = pm.response.json(); data = res.data || {}; } catch (e) {}",
+                  "if (data.accessToken) pm.collectionVariables.set('accessToken', data.accessToken);",
+                  "if (data.user && data.user.id) pm.collectionVariables.set('userId', data.user.id);"
                 ]
               }
             }
@@ -289,6 +306,125 @@
               ]
             },
             "description": "Get current authenticated user."
+          }
+        },
+        {
+          "name": "GET /users/me/reliability",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/me/reliability",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "me",
+                "reliability"
+              ]
+            },
+            "description": "Get current reliability counters and restrictions."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Billing",
+      "item": [
+        {
+          "name": "GET /billing/me",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/billing/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "billing",
+                "me"
+              ]
+            },
+            "description": "Get current subscription access state."
+          }
+        },
+        {
+          "name": "POST /billing/checkout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/billing/checkout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "billing",
+                "checkout"
+              ]
+            },
+            "description": "Initialize checkout metadata.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amountMinor\": 5000,\n  \"currency\": \"NGN\",\n  \"planCode\": \"basic_monthly\",\n  \"durationDays\": 30\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let res = {};",
+                  "let data = {};",
+                  "try { res = pm.response.json(); data = res.data || {}; } catch (e) {}",
+                  "if (data.checkout && data.checkout.reference) {",
+                  "  pm.collectionVariables.set(\"paymentReference\", data.checkout.reference);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /billing/webhook",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-payment-webhook-secret",
+                "value": "{{paymentWebhookSecret}}"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/billing/webhook",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "billing",
+                "webhook"
+              ]
+            },
+            "description": "Simulate payment provider webhook.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"provider\": \"manual\",\n  \"eventId\": \"evt_local_success_001\",\n  \"type\": \"payment.succeeded\",\n  \"data\": {\n    \"userId\": \"{{userId}}\",\n    \"reference\": \"{{paymentReference}}\",\n    \"amountMinor\": 5000,\n    \"currency\": \"NGN\",\n    \"planCode\": \"basic_monthly\",\n    \"durationDays\": 30\n  }\n}"
+            }
           }
         }
       ]
@@ -327,8 +463,9 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "let res = {};",
                   "let data = {};",
-                  "try { data = pm.response.json(); } catch (e) {}",
+                  "try { res = pm.response.json(); data = res.data || {}; } catch (e) {}",
                   "if (data.listing && data.listing.id) {",
                   "  pm.collectionVariables.set('listingId', data.listing.id);",
                   "  if (!pm.collectionVariables.get('requesterListingId')) pm.collectionVariables.set('requesterListingId', data.listing.id);",
@@ -337,6 +474,25 @@
               }
             }
           ]
+        },
+        {
+          "name": "POST /listings/:listingId/renew",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/listings/{{listingId}}/renew",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "listings",
+                "{{listingId}}",
+                "renew"
+              ]
+            },
+            "description": "Renew listing expiry and reactivate listing if eligible."
+          }
         },
         {
           "name": "GET /listings/me",
@@ -361,8 +517,9 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "let res = {};",
                   "let data = [];",
-                  "try { data = pm.response.json(); } catch (e) {}",
+                  "try { res = pm.response.json(); data = Array.isArray(res.data) ? res.data : []; } catch (e) {}",
                   "if (Array.isArray(data) && data.length && data[0].id) {",
                   "  pm.collectionVariables.set('listingId', data[0].id);",
                   "}"
@@ -399,8 +556,9 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "let res = {};",
                   "let data = {};",
-                  "try { data = pm.response.json(); } catch (e) {}",
+                  "try { res = pm.response.json(); data = res.data || {}; } catch (e) {}",
                   "if (data.chain && data.chain.id) pm.collectionVariables.set('chainId', data.chain.id);",
                   "if (data.recommendations && data.recommendations.length) pm.collectionVariables.set('targetListingId', data.recommendations[0].listingId);"
                 ]
@@ -432,8 +590,9 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "let res = {};",
                   "let data = {};",
-                  "try { data = pm.response.json(); } catch (e) {}",
+                  "try { res = pm.response.json(); data = res.data || {}; } catch (e) {}",
                   "if (data.chain && data.chain.id) pm.collectionVariables.set('chainId', data.chain.id);",
                   "if (data.recommendations && data.recommendations.length) pm.collectionVariables.set('targetListingId', data.recommendations[0].listingId);"
                 ]
@@ -475,8 +634,9 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "let res = {};",
                   "let data = {};",
-                  "try { data = pm.response.json(); } catch (e) {}",
+                  "try { res = pm.response.json(); data = res.data || {}; } catch (e) {}",
                   "if (data.interest && data.interest.id) pm.collectionVariables.set('interestId', data.interest.id);"
                 ]
               }
@@ -507,8 +667,9 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "let res = {};",
                   "let data = {};",
-                  "try { data = pm.response.json(); } catch (e) {}",
+                  "try { res = pm.response.json(); data = res.data || {}; } catch (e) {}",
                   "if (data.listings && data.listings.length && data.listings[0].requests && data.listings[0].requests.length) {",
                   "  pm.collectionVariables.set('interestId', data.listings[0].requests[0].interestId);",
                   "}"
@@ -597,6 +758,26 @@
           }
         },
         {
+          "name": "POST /matching/interests/:interestId/confirm-taken",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/matching/interests/{{interestId}}/confirm-taken",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "matching",
+                "interests",
+                "{{interestId}}",
+                "confirm-taken"
+              ]
+            },
+            "description": "Requester confirms apartment taken after owner has approved contact."
+          }
+        },
+        {
           "name": "GET /matching/chains/me",
           "request": {
             "method": "GET",
@@ -620,8 +801,9 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "let res = {};",
                   "let data = [];",
-                  "try { data = pm.response.json(); } catch (e) {}",
+                  "try { res = pm.response.json(); data = Array.isArray(res.data) ? res.data : []; } catch (e) {}",
                   "if (Array.isArray(data) && data.length && data[0].id) {",
                   "  pm.collectionVariables.set('chainId', data[0].id);",
                   "  pm.collectionVariables.set('adminChainId', data[0].id);",
@@ -715,8 +897,9 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "let res = {};",
                   "let data = {};",
-                  "try { data = pm.response.json(); } catch (e) {}",
+                  "try { res = pm.response.json(); data = res.data || {}; } catch (e) {}",
                   "if (data.unlockId) pm.collectionVariables.set('unlockId', data.unlockId);"
                 ]
               }
@@ -802,7 +985,7 @@
             "description": "Admin force-break a chain with reason.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"reason\": \"ADMIN_FORCE\"\n}"
+              "raw": "{\n  \"reason\": \"NO_SHOW\",\n  \"offenderUserId\": \"{{userId}}\"\n}"
             },
             "auth": {
               "type": "bearer",
@@ -873,6 +1056,119 @@
                   "type": "string"
                 }
               ]
+            }
+          }
+        },
+        {
+          "name": "GET /admin/users/:userId/reliability",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/users/{{userId}}/reliability",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "users",
+                "{{userId}}",
+                "reliability"
+              ]
+            },
+            "description": "Admin view of user reliability status.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST /admin/users/:userId/penalty",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/users/{{userId}}/penalty",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "users",
+                "{{userId}}",
+                "penalty"
+              ]
+            },
+            "description": "Admin applies manual reliability penalty.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Manual enforcement\",\n  \"scorePenalty\": 10,\n  \"cooldownHours\": 24\n}"
+            }
+          }
+        },
+        {
+          "name": "POST /admin/users/:userId/unblock",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/users/{{userId}}/unblock",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "users",
+                "{{userId}}",
+                "unblock"
+              ]
+            },
+            "description": "Admin clears reliability restrictions.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Issue resolved\"\n}"
             }
           }
         }
