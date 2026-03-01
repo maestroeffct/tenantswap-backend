@@ -75,16 +75,18 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       this.logger.error('Unhandled exception', exception as Error);
     }
 
+    const data: Record<string, unknown> = {};
+    if (meta) {
+      data.meta = meta;
+    }
+    if (details && statusCode === HttpStatus.BAD_REQUEST) {
+      data.errors = details;
+    }
+
     response.status(statusCode).json({
-      success: false,
       statusCode,
       message,
-      timestamp: new Date().toISOString(),
-      path: request.url,
-      ...(meta ? { meta } : {}),
-      ...(details && statusCode === HttpStatus.BAD_REQUEST
-        ? { errors: details }
-        : {}),
+      data: Object.keys(data).length > 0 ? data : null,
     });
   }
 }
