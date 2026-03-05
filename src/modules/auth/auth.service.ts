@@ -95,7 +95,6 @@ export class AuthService {
           data: {
             canConnectLandlord: dto.canConnectLandlord,
             hasLandlordContact: dto.hasLandlordContact,
-            onboardingComplete: true,
             emailVerificationTokenHash: tokenArtifacts.tokenHash,
             emailVerificationExpiresAt: tokenArtifacts.expiresAt,
           },
@@ -130,7 +129,6 @@ export class AuthService {
         password: hashedPassword,
         canConnectLandlord: dto.canConnectLandlord,
         hasLandlordContact: dto.hasLandlordContact,
-        onboardingComplete: true,
         emailVerificationTokenHash: tokenArtifacts.tokenHash,
         emailVerificationExpiresAt: tokenArtifacts.expiresAt,
       },

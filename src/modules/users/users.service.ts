@@ -87,12 +87,10 @@ export class UsersService {
 
     if (changesCanConnectLandlord && nextCanConnectLandlord !== undefined) {
       data.canConnectLandlord = nextCanConnectLandlord;
-      data.onboardingComplete = true;
     }
 
     if (changesHasLandlordContact && nextHasLandlordContact !== undefined) {
       data.hasLandlordContact = nextHasLandlordContact;
-      data.onboardingComplete = true;
     }
 
     let verificationToken: string | undefined;

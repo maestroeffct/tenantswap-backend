@@ -95,6 +95,8 @@ Error example:
 3. `POST /auth/login`
 4. `POST /listings`
 5. `POST /matching/run`
+
+Creating the first listing (`POST /listings`) marks `onboardingComplete=true`.
 6. Chain accept/decline/connect endpoints as needed
 
 ### B) One-to-Many Interest Flow (new)
@@ -174,6 +176,7 @@ Required request body:
 ```
 
 `canConnectLandlord` and `hasLandlordContact` are required onboarding fields at registration.
+`onboardingComplete` is backend-controlled and remains `false` after registration until swap engine setup is completed.
 
 ### POST `/matching/run`
 

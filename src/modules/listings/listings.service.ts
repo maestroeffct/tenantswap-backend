@@ -22,21 +22,30 @@ export class ListingsService {
   }
 
   async createListing(userId: string, dto: CreateListingDto) {
-    const listing = await this.prisma.swapListing.create({
-      data: {
-        userId,
-        desiredType: dto.desiredType,
-        desiredCity: dto.desiredCity,
-        maxBudget: dto.maxBudget,
-        timeline: dto.timeline,
-        currentType: dto.currentType,
-        currentCity: dto.currentCity,
-        currentRent: dto.currentRent,
-        availableOn: new Date(dto.availableOn),
-        features: dto.features,
-        status: 'ACTIVE',
-        expiresAt: this.computeListingExpiresAt(),
-      },
+    const listing = await this.prisma.$transaction(async (tx) => {
+      const createdListing = await tx.swapListing.create({
+        data: {
+          userId,
+          desiredType: dto.desiredType,
+          desiredCity: dto.desiredCity,
+          maxBudget: dto.maxBudget,
+          timeline: dto.timeline,
+          currentType: dto.currentType,
+          currentCity: dto.currentCity,
+          currentRent: dto.currentRent,
+          availableOn: new Date(dto.availableOn),
+          features: dto.features,
+          status: 'ACTIVE',
+          expiresAt: this.computeListingExpiresAt(),
+        },
+      });
+
+      await tx.user.update({
+        where: { id: userId },
+        data: { onboardingComplete: true },
+      });
+
+      return createdListing;
     });
 
     return {

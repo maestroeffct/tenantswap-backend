@@ -64,6 +64,8 @@ Registration payload must include:
 - `hasLandlordContact`
 
 These onboarding booleans are required by backend validation.
+Backend keeps `onboardingComplete=false` after registration.
+Set user to completed only after swap-engine setup (first listing creation).
 
 ### POST `/matching/run`
 
