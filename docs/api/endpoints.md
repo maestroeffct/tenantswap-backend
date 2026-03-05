@@ -158,6 +158,23 @@ Error example:
 
 ## Key Response Shapes
 
+### POST `/auth/register`
+
+Required request body:
+
+```json
+{
+  "fullName": "Ada Lovelace",
+  "email": "ada@example.com",
+  "phone": "+2348012345678",
+  "password": "Password123!",
+  "canConnectLandlord": true,
+  "hasLandlordContact": true
+}
+```
+
+`canConnectLandlord` and `hasLandlordContact` are required onboarding fields at registration.
+
 ### POST `/matching/run`
 
 Possible payload now includes `stats`:
@@ -391,11 +408,14 @@ Update request body (all fields optional):
   "fullName": "Ada Lovelace",
   "email": "ada@example.com",
   "phone": "+2348012345678",
+  "canConnectLandlord": true,
+  "hasLandlordContact": true,
   "currentPassword": "OldPassword1!"
 }
 ```
 
 `currentPassword` is required when changing `email` or `phone`.
+You can also update `canConnectLandlord` and `hasLandlordContact` via this endpoint.
 
 ### PATCH `/users/me/password`
 

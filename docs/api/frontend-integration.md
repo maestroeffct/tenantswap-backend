@@ -52,6 +52,19 @@ For frontend parsing, always read payload from `response.data`.
 
 ## Important Contracts
 
+### POST `/auth/register`
+
+Registration payload must include:
+
+- `fullName`
+- `email`
+- `phone`
+- `password`
+- `canConnectLandlord`
+- `hasLandlordContact`
+
+These onboarding booleans are required by backend validation.
+
 ### POST `/matching/run`
 
 Response `data` includes:

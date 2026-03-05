@@ -33,6 +33,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         noShowCount: true,
         cooldownUntil: true,
         blockedUntil: true,
+        canConnectLandlord: true,
+        hasLandlordContact: true,
+        onboardingComplete: true,
       },
     });
   }

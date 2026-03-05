@@ -34,6 +34,9 @@ export class UsersService {
         email: true,
         phone: true,
         password: true,
+        canConnectLandlord: true,
+        hasLandlordContact: true,
+        onboardingComplete: true,
       },
     });
 
@@ -44,10 +47,19 @@ export class UsersService {
     const nextFullName = dto.fullName?.trim();
     const nextEmail = dto.email ? this.normalizeEmail(dto.email) : undefined;
     const nextPhone = dto.phone ? this.normalizePhone(dto.phone) : undefined;
+    const nextCanConnectLandlord = dto.canConnectLandlord;
+    const nextHasLandlordContact = dto.hasLandlordContact;
 
     const changesEmail =
       nextEmail !== undefined && nextEmail !== (user.email ?? null);
     const changesPhone = nextPhone !== undefined && nextPhone !== user.phone;
+    const changesCanConnectLandlord =
+      nextCanConnectLandlord !== undefined &&
+      nextCanConnectLandlord !== user.canConnectLandlord;
+    const changesHasLandlordContact =
+      nextHasLandlordContact !== undefined &&
+      nextHasLandlordContact !== user.hasLandlordContact;
+
     const needsPasswordCheck = changesEmail || changesPhone;
 
     if (needsPasswordCheck && !dto.currentPassword) {
@@ -71,6 +83,16 @@ export class UsersService {
 
     if (changesPhone && nextPhone) {
       data.phone = nextPhone;
+    }
+
+    if (changesCanConnectLandlord && nextCanConnectLandlord !== undefined) {
+      data.canConnectLandlord = nextCanConnectLandlord;
+      data.onboardingComplete = true;
+    }
+
+    if (changesHasLandlordContact && nextHasLandlordContact !== undefined) {
+      data.hasLandlordContact = nextHasLandlordContact;
+      data.onboardingComplete = true;
     }
 
     let verificationToken: string | undefined;
@@ -109,6 +131,9 @@ export class UsersService {
           noShowCount: true,
           cooldownUntil: true,
           blockedUntil: true,
+          canConnectLandlord: true,
+          hasLandlordContact: true,
+          onboardingComplete: true,
           createdAt: true,
         },
       });
@@ -183,6 +208,9 @@ export class UsersService {
         noShowCount: true,
         cooldownUntil: true,
         blockedUntil: true,
+        canConnectLandlord: true,
+        hasLandlordContact: true,
+        onboardingComplete: true,
         createdAt: true,
       },
     });

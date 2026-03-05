@@ -1,5 +1,6 @@
 import { Transform } from 'class-transformer';
 import {
+  IsBoolean,
   IsEmail,
   IsOptional,
   IsString,
@@ -7,6 +8,25 @@ import {
   MaxLength,
   MinLength,
 } from 'class-validator';
+
+function toBoolean(value: unknown): unknown {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true') {
+      return true;
+    }
+
+    if (normalized === 'false') {
+      return false;
+    }
+  }
+
+  return value;
+}
 
 export class UpdateProfileDto {
   @Transform(({ value }: { value: unknown }) =>
@@ -44,6 +64,16 @@ export class UpdateProfileDto {
     message: 'phone must be in international E.164 format',
   })
   phone?: string;
+
+  @Transform(({ value }: { value: unknown }) => toBoolean(value))
+  @IsOptional()
+  @IsBoolean()
+  canConnectLandlord?: boolean;
+
+  @Transform(({ value }: { value: unknown }) => toBoolean(value))
+  @IsOptional()
+  @IsBoolean()
+  hasLandlordContact?: boolean;
 
   @IsOptional()
   @IsString()

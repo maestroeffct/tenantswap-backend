@@ -93,6 +93,9 @@ export class AuthService {
         await this.prisma.user.update({
           where: { id: existingUser.id },
           data: {
+            canConnectLandlord: dto.canConnectLandlord,
+            hasLandlordContact: dto.hasLandlordContact,
+            onboardingComplete: true,
             emailVerificationTokenHash: tokenArtifacts.tokenHash,
             emailVerificationExpiresAt: tokenArtifacts.expiresAt,
           },
@@ -125,6 +128,9 @@ export class AuthService {
         email: normalizedEmail,
         phone: normalizedPhone,
         password: hashedPassword,
+        canConnectLandlord: dto.canConnectLandlord,
+        hasLandlordContact: dto.hasLandlordContact,
+        onboardingComplete: true,
         emailVerificationTokenHash: tokenArtifacts.tokenHash,
         emailVerificationExpiresAt: tokenArtifacts.expiresAt,
       },
@@ -175,6 +181,9 @@ export class AuthService {
         noShowCount: true,
         cooldownUntil: true,
         blockedUntil: true,
+        canConnectLandlord: true,
+        hasLandlordContact: true,
+        onboardingComplete: true,
       },
     });
 
@@ -254,6 +263,9 @@ export class AuthService {
         noShowCount: user.noShowCount,
         cooldownUntil: user.cooldownUntil,
         blockedUntil: user.blockedUntil,
+        canConnectLandlord: user.canConnectLandlord,
+        hasLandlordContact: user.hasLandlordContact,
+        onboardingComplete: user.onboardingComplete,
       },
     };
   }
@@ -278,6 +290,9 @@ export class AuthService {
         noShowCount: true,
         cooldownUntil: true,
         blockedUntil: true,
+        canConnectLandlord: true,
+        hasLandlordContact: true,
+        onboardingComplete: true,
       },
     });
 

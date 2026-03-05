@@ -19,6 +19,9 @@ export type CurrentUserPayload = {
   noShowCount: number;
   cooldownUntil: Date | null;
   blockedUntil: Date | null;
+  canConnectLandlord: boolean;
+  hasLandlordContact: boolean;
+  onboardingComplete: boolean;
 };
 
 export const CurrentUser = createParamDecorator(

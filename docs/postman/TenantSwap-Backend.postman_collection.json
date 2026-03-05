@@ -123,7 +123,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"fullName\": \"Ada Lovelace\",\n  \"email\": \"{{email}}\",\n  \"phone\": \"{{phone}}\",\n  \"password\": \"{{password}}\"\n}"
+              "raw": "{\n  \"fullName\": \"Ada Lovelace\",\n  \"email\": \"{{email}}\",\n  \"phone\": \"{{phone}}\",\n  \"password\": \"{{password}}\",\n  \"canConnectLandlord\": true,\n  \"hasLandlordContact\": true\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/auth/register",

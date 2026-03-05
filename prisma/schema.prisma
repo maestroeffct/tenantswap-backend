@@ -28,6 +28,9 @@ model User {
   noShowCount                Int                @default(0)
   cooldownUntil              DateTime?
   blockedUntil               DateTime?
+  canConnectLandlord         Boolean            @default(false)
+  hasLandlordContact         Boolean            @default(false)
+  onboardingComplete         Boolean            @default(false)
   createdAt                  DateTime           @default(now())
 
   listings            SwapListing[]

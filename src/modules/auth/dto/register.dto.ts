@@ -1,5 +1,6 @@
 import { Transform } from 'class-transformer';
 import {
+  IsBoolean,
   IsEmail,
   IsNotEmpty,
   IsString,
@@ -7,6 +8,25 @@ import {
   MaxLength,
   MinLength,
 } from 'class-validator';
+
+function toBoolean(value: unknown): unknown {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true') {
+      return true;
+    }
+
+    if (normalized === 'false') {
+      return false;
+    }
+  }
+
+  return value;
+}
 
 export class RegisterDto {
   @Transform(({ value }: { value: unknown }) =>
@@ -52,4 +72,12 @@ export class RegisterDto {
       'password must include uppercase, lowercase, number, and special character',
   })
   password: string;
+
+  @Transform(({ value }: { value: unknown }) => toBoolean(value))
+  @IsBoolean()
+  canConnectLandlord: boolean;
+
+  @Transform(({ value }: { value: unknown }) => toBoolean(value))
+  @IsBoolean()
+  hasLandlordContact: boolean;
 }
