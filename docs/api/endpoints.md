@@ -22,6 +22,14 @@ Required/runtime variables currently used by the backend:
 - `AUTH_LOGIN_WINDOW_MS`
 - `AUTH_LOGIN_LOCK_MS`
 - `EMAIL_VERIFICATION_TOKEN_TTL_MS`
+- `SMTP_HOST`
+- `SMTP_PORT`
+- `SMTP_SECURE`
+- `SMTP_USER`
+- `SMTP_PASS`
+- `MAIL_FROM`
+- `EMAIL_SEND_RETRY_MAX_ATTEMPTS`
+- `EMAIL_SEND_RETRY_DELAY_MS`
 - `CHAIN_ACCEPT_TTL_HOURS`
 - `CHAIN_EXPIRE_SWEEP_LIMIT`
 - `INTEREST_REQUEST_TTL_HOURS`
@@ -55,6 +63,8 @@ Required/runtime variables currently used by the backend:
 - Subscription enforcement guard protects listing/matching endpoints when `SUBSCRIPTION_ENFORCEMENT=true`.
 - Allowlisted testers in `TESTER_ALLOWLIST` bypass payment checks.
 - Reliability guard blocks users in cooldown (`429`) or temporary block (`403`) windows.
+- Register duplicate checks now return explicit `409` conflict errors (`Email already exists`, `Phone is already used`).
+- Verification emails are sent via SMTP (HTML + text); if SMTP is unavailable, backend logs a fallback verification link.
 
 Global response envelope (success and errors):
 

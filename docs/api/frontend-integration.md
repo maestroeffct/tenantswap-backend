@@ -66,6 +66,7 @@ Registration payload must include:
 These onboarding booleans are required by backend validation.
 Backend keeps `onboardingComplete=false` after registration.
 Set user to completed only after swap-engine setup (first listing creation).
+Handle `409` on register for duplicate email/phone.
 
 ### POST `/matching/run`
 
@@ -144,6 +145,8 @@ Requester finalizes an approved request from their side. Backend then:
 ### GET `/billing/me`
 
 Use `response.data.hasAccess` to determine whether user can access listing/matching flows.
+
+Verification email delivery uses SMTP with HTML + text templates and retries.
 
 ### POST `/billing/checkout`
 

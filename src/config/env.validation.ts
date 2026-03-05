@@ -137,6 +137,22 @@ export function validateEnv(config: RawEnv): RawEnv {
       'EMAIL_VERIFICATION_TOKEN_TTL_MS',
       86_400_000,
     ),
+    SMTP_HOST: asString(config.SMTP_HOST),
+    SMTP_PORT: asPositiveInt(config.SMTP_PORT, 'SMTP_PORT', 587),
+    SMTP_SECURE: asBoolean(config.SMTP_SECURE, false),
+    SMTP_USER: asString(config.SMTP_USER),
+    SMTP_PASS: asString(config.SMTP_PASS),
+    MAIL_FROM: asString(config.MAIL_FROM),
+    EMAIL_SEND_RETRY_MAX_ATTEMPTS: asPositiveInt(
+      config.EMAIL_SEND_RETRY_MAX_ATTEMPTS,
+      'EMAIL_SEND_RETRY_MAX_ATTEMPTS',
+      3,
+    ),
+    EMAIL_SEND_RETRY_DELAY_MS: asPositiveInt(
+      config.EMAIL_SEND_RETRY_DELAY_MS,
+      'EMAIL_SEND_RETRY_DELAY_MS',
+      750,
+    ),
     CHAIN_ACCEPT_TTL_HOURS: asPositiveInt(
       config.CHAIN_ACCEPT_TTL_HOURS,
       'CHAIN_ACCEPT_TTL_HOURS',

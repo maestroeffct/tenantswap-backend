@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   HttpException,
   HttpStatus,
   Injectable,
@@ -12,6 +13,7 @@ import { compare, hash } from 'bcrypt';
 import { createHash, randomBytes } from 'crypto';
 
 import { PrismaService } from '../../common/prisma.service';
+import { EmailService } from '../../common/services/email.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ResendVerificationDto } from './dto/resend-verification.dto';
@@ -56,6 +58,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly config: ConfigService,
+    private readonly emailService: EmailService,
   ) {
     this.loginMaxAttempts =
       this.config.get<number>('AUTH_LOGIN_MAX_ATTEMPTS') ?? 5;
@@ -73,53 +76,37 @@ export class AuthService {
     const normalizedPhone = this.normalizePhone(dto.phone);
     const normalizedEmail = this.normalizeEmail(dto.email);
 
-    const existingUser = await this.prisma.user.findFirst({
-      where: {
-        OR: [{ phone: normalizedPhone }, { email: normalizedEmail }],
-      },
-      select: { id: true, email: true, emailVerifiedAt: true },
-    });
+    const [existingEmailUser, existingPhoneUser] = await Promise.all([
+      this.prisma.user.findUnique({
+        where: { email: normalizedEmail },
+        select: { id: true },
+      }),
+      this.prisma.user.findUnique({
+        where: { phone: normalizedPhone },
+        select: { id: true },
+      }),
+    ]);
 
-    let verificationToken: string | undefined;
+    if (existingEmailUser || existingPhoneUser) {
+      const conflictMessage =
+        existingEmailUser && existingPhoneUser
+          ? 'Email already exists and phone is already used'
+          : existingEmailUser
+            ? 'Email already exists'
+            : 'Phone is already used';
 
-    if (existingUser) {
-      if (
-        !existingUser.emailVerifiedAt &&
-        existingUser.email === normalizedEmail
-      ) {
-        const tokenArtifacts = this.generateEmailVerificationArtifacts();
-        verificationToken = tokenArtifacts.rawToken;
+      this.audit('register_conflict', {
+        ip,
+        email: normalizedEmail,
+        phone: normalizedPhone,
+        conflict: conflictMessage,
+      });
 
-        await this.prisma.user.update({
-          where: { id: existingUser.id },
-          data: {
-            canConnectLandlord: dto.canConnectLandlord,
-            hasLandlordContact: dto.hasLandlordContact,
-            emailVerificationTokenHash: tokenArtifacts.tokenHash,
-            emailVerificationExpiresAt: tokenArtifacts.expiresAt,
-          },
-        });
-
-        this.audit('register_existing_unverified', {
-          ip,
-          userId: existingUser.id,
-          email: normalizedEmail,
-        });
-        this.logVerificationLink(normalizedEmail, tokenArtifacts.rawToken);
-      } else {
-        this.audit('register_existing_verified', {
-          ip,
-          email: normalizedEmail,
-          phone: normalizedPhone,
-        });
-      }
-
-      return this.registerResponse(verificationToken);
+      throw new ConflictException(conflictMessage);
     }
 
     const hashedPassword = await hash(dto.password, 10);
     const tokenArtifacts = this.generateEmailVerificationArtifacts();
-    verificationToken = tokenArtifacts.rawToken;
 
     const user = await this.prisma.user.create({
       data: {
@@ -135,14 +122,25 @@ export class AuthService {
       select: { id: true, email: true },
     });
 
+    const emailDispatch = await this.dispatchVerificationEmail(
+      normalizedEmail,
+      tokenArtifacts.rawToken,
+    );
+
     this.audit('register_success', {
       ip,
       userId: user.id,
       email: user.email,
+      emailDelivered: emailDispatch.delivered,
+      emailProvider: emailDispatch.provider,
+      emailAttempts: emailDispatch.attempts,
+      ...(emailDispatch.messageId
+        ? { emailMessageId: emailDispatch.messageId }
+        : {}),
+      ...(emailDispatch.error ? { emailError: emailDispatch.error } : {}),
     });
-    this.logVerificationLink(normalizedEmail, tokenArtifacts.rawToken);
 
-    return this.registerResponse(verificationToken);
+    return this.registerResponse(tokenArtifacts.rawToken);
   }
 
   async login(dto: LoginDto, ip: string) {
@@ -352,7 +350,23 @@ export class AuthService {
         email: normalizedEmail,
       });
 
-      this.logVerificationLink(normalizedEmail, tokenArtifacts.rawToken);
+      const emailDispatch = await this.dispatchVerificationEmail(
+        normalizedEmail,
+        tokenArtifacts.rawToken,
+      );
+
+      this.audit('verification_resend_delivery', {
+        ip,
+        userId: user.id,
+        email: normalizedEmail,
+        emailDelivered: emailDispatch.delivered,
+        emailProvider: emailDispatch.provider,
+        emailAttempts: emailDispatch.attempts,
+        ...(emailDispatch.messageId
+          ? { emailMessageId: emailDispatch.messageId }
+          : {}),
+        ...(emailDispatch.error ? { emailError: emailDispatch.error } : {}),
+      });
     } else {
       this.audit('verification_resend_non_existing_or_verified', {
         ip,
@@ -548,17 +562,29 @@ export class AuthService {
     return createHash('sha256').update(token).digest('hex');
   }
 
-  private logVerificationLink(email: string, token: string): void {
-    if (!this.shouldExposeVerificationToken()) {
-      this.logger.log(`Verification email queued for ${email}`);
-      return;
+  private buildVerificationUrl(token: string): string {
+    const separator = this.frontendVerifyEmailUrl.includes('?') ? '&' : '?';
+    return `${this.frontendVerifyEmailUrl}${separator}token=${token}`;
+  }
+
+  private async dispatchVerificationEmail(email: string, token: string) {
+    const verificationUrl = this.buildVerificationUrl(token);
+    const result = await this.emailService.sendVerificationEmail({
+      email,
+      verificationUrl,
+    });
+
+    if (!result.delivered) {
+      this.logVerificationLink(email, token);
     }
 
-    const separator = this.frontendVerifyEmailUrl.includes('?') ? '&' : '?';
-    const verificationUrl = `${this.frontendVerifyEmailUrl}${separator}token=${token}`;
+    return result;
+  }
 
-    this.logger.log(
-      `Verification email prepared for ${email}: ${verificationUrl}`,
+  private logVerificationLink(email: string, token: string): void {
+    const verificationUrl = this.buildVerificationUrl(token);
+    this.logger.warn(
+      `[EMAIL_FALLBACK_LINK] email=${email} verificationUrl=${verificationUrl}`,
     );
   }
 
