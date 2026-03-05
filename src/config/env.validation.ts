@@ -1,257 +1,290 @@
+import { z } from 'zod';
+
 type RawEnv = Record<string, unknown>;
 
-function asString(value: unknown): string | undefined {
-  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+function requiredString(key: string) {
+  return z.any().transform((value, ctx) => {
+    if (typeof value !== 'string' || !value.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `${key} is required`,
+      });
+      return z.NEVER;
+    }
+
+    return value.trim();
+  });
 }
 
-function asPositiveInt(value: unknown, key: string, fallback?: number): number {
-  const stringValue = asString(value);
+function optionalString() {
+  return z.any().transform((value) => {
+    if (typeof value !== 'string') {
+      return undefined;
+    }
+
+    const trimmed = value.trim();
+    return trimmed ? trimmed : undefined;
+  });
+}
+
+function positiveIntWithDefault(key: string, fallback: number) {
+  return z.any().transform((value, ctx) => {
+    if (value === undefined || value === null || value === '') {
+      return fallback;
+    }
+
+    const parsed =
+      typeof value === 'number'
+        ? value
+        : typeof value === 'string'
+          ? Number.parseInt(value.trim(), 10)
+          : Number.NaN;
+
+    if (!Number.isInteger(parsed) || parsed <= 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `${key} must be a positive integer`,
+      });
+      return z.NEVER;
+    }
+
+    return parsed;
+  });
+}
+
+function booleanWithDefault(key: string, fallback: boolean) {
+  return z.any().transform((value, ctx) => {
+    if (value === undefined || value === null || value === '') {
+      return fallback;
+    }
+
+    if (typeof value === 'boolean') {
+      return value;
+    }
+
+    if (typeof value === 'number') {
+      if (value === 1) return true;
+      if (value === 0) return false;
+    }
+
+    if (typeof value === 'string') {
+      const normalized = value.trim().toLowerCase();
+      if (['1', 'true', 'yes', 'on'].includes(normalized)) {
+        return true;
+      }
+
+      if (['0', 'false', 'no', 'off'].includes(normalized)) {
+        return false;
+      }
+    }
+
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `${key} must be true/false`,
+    });
+    return z.NEVER;
+  });
+}
+
+function csvList() {
+  return z.any().transform((value) => {
+    if (typeof value !== 'string' || !value.trim()) {
+      return [] as string[];
+    }
+
+    return value
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean);
+  });
+}
+
+const jwtExpiresIn = z.any().transform((value, ctx) => {
   const resolved =
-    stringValue ?? (fallback !== undefined ? String(fallback) : '');
+    typeof value === 'string' && value.trim() ? value.trim() : '15m';
 
-  const parsed = Number.parseInt(resolved, 10);
-  if (!Number.isInteger(parsed) || parsed <= 0) {
-    throw new Error(`${key} must be a positive integer`);
+  if (!/^\d+[smhd]$/.test(resolved)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'JWT_EXPIRES_IN must look like 15m, 1h, or 7d (number + s|m|h|d)',
+    });
+    return z.NEVER;
   }
 
-  return parsed;
-}
+  return resolved;
+});
 
-function asBoolean(value: unknown, fallback = false): boolean {
-  const stringValue = asString(value);
-  if (!stringValue) {
-    return fallback;
-  }
-
-  if (['1', 'true', 'yes', 'on'].includes(stringValue.toLowerCase())) {
-    return true;
-  }
-  if (['0', 'false', 'no', 'off'].includes(stringValue.toLowerCase())) {
-    return false;
-  }
-
-  throw new Error('Boolean environment variables must be true/false');
-}
-
-function asCsvList(value: unknown): string[] {
-  const stringValue = asString(value);
-  if (!stringValue) {
-    return [];
-  }
-
-  return stringValue
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-function assertJwtExpiresIn(value: string): void {
-  const valid = /^\d+[smhd]$/.test(value);
-  if (!valid) {
-    throw new Error(
-      'JWT_EXPIRES_IN must look like 15m, 1h, or 7d (number + s|m|h|d)',
-    );
-  }
-}
-
-export function validateEnv(config: RawEnv): RawEnv {
-  const databaseUrl = asString(config.DATABASE_URL);
-  const jwtSecret = asString(config.JWT_SECRET);
-  const jwtExpiresIn = asString(config.JWT_EXPIRES_IN) ?? '15m';
-  const frontendVerifyEmailUrl =
-    asString(config.FRONTEND_VERIFY_EMAIL_URL) ??
-    'http://localhost:3000/verify-email';
-
-  if (!databaseUrl) {
-    throw new Error('DATABASE_URL is required');
-  }
-  if (
-    !databaseUrl.startsWith('postgresql://') &&
-    !databaseUrl.startsWith('postgres://')
-  ) {
-    throw new Error('DATABASE_URL must be a PostgreSQL connection string');
-  }
-
-  if (!jwtSecret || jwtSecret.length < 32) {
-    throw new Error(
-      'JWT_SECRET is required and must be at least 32 characters',
-    );
-  }
-
-  assertJwtExpiresIn(jwtExpiresIn);
-
-  return {
-    ...config,
-    DATABASE_URL: databaseUrl,
-    JWT_SECRET: jwtSecret,
+const envSchema = z
+  .object({
+    DATABASE_URL: requiredString('DATABASE_URL').refine(
+      (value) =>
+        value.startsWith('postgresql://') || value.startsWith('postgres://'),
+      {
+        message: 'DATABASE_URL must be a PostgreSQL connection string',
+      },
+    ),
+    JWT_SECRET: requiredString('JWT_SECRET').refine(
+      (value) => value.length >= 32,
+      {
+        message: 'JWT_SECRET is required and must be at least 32 characters',
+      },
+    ),
     JWT_EXPIRES_IN: jwtExpiresIn,
-    FRONTEND_VERIFY_EMAIL_URL: frontendVerifyEmailUrl,
-    PORT: asPositiveInt(config.PORT, 'PORT', 3000),
-    THROTTLE_GLOBAL_TTL_MS: asPositiveInt(
-      config.THROTTLE_GLOBAL_TTL_MS,
+    FRONTEND_VERIFY_EMAIL_URL: z.any().transform((value) => {
+      if (typeof value === 'string' && value.trim()) {
+        return value.trim();
+      }
+
+      return 'http://localhost:3000/verify-email';
+    }),
+    PORT: positiveIntWithDefault('PORT', 3000),
+    THROTTLE_GLOBAL_TTL_MS: positiveIntWithDefault(
       'THROTTLE_GLOBAL_TTL_MS',
       60_000,
     ),
-    THROTTLE_GLOBAL_LIMIT: asPositiveInt(
-      config.THROTTLE_GLOBAL_LIMIT,
-      'THROTTLE_GLOBAL_LIMIT',
-      100,
-    ),
-    THROTTLE_AUTH_TTL_MS: asPositiveInt(
-      config.THROTTLE_AUTH_TTL_MS,
+    THROTTLE_GLOBAL_LIMIT: positiveIntWithDefault('THROTTLE_GLOBAL_LIMIT', 100),
+    THROTTLE_AUTH_TTL_MS: positiveIntWithDefault(
       'THROTTLE_AUTH_TTL_MS',
       60_000,
     ),
-    THROTTLE_AUTH_LIMIT: asPositiveInt(
-      config.THROTTLE_AUTH_LIMIT,
-      'THROTTLE_AUTH_LIMIT',
-      5,
-    ),
-    THROTTLE_MATCH_RUN_TTL_MS: asPositiveInt(
-      config.THROTTLE_MATCH_RUN_TTL_MS,
+    THROTTLE_AUTH_LIMIT: positiveIntWithDefault('THROTTLE_AUTH_LIMIT', 5),
+    THROTTLE_MATCH_RUN_TTL_MS: positiveIntWithDefault(
       'THROTTLE_MATCH_RUN_TTL_MS',
       60_000,
     ),
-    THROTTLE_MATCH_RUN_LIMIT: asPositiveInt(
-      config.THROTTLE_MATCH_RUN_LIMIT,
+    THROTTLE_MATCH_RUN_LIMIT: positiveIntWithDefault(
       'THROTTLE_MATCH_RUN_LIMIT',
       10,
     ),
-    AUTH_LOGIN_MAX_ATTEMPTS: asPositiveInt(
-      config.AUTH_LOGIN_MAX_ATTEMPTS,
-      'AUTH_LOGIN_MAX_ATTEMPTS',
-      5,
-    ),
-    AUTH_LOGIN_WINDOW_MS: asPositiveInt(
-      config.AUTH_LOGIN_WINDOW_MS,
-      'AUTH_LOGIN_WINDOW_MS',
-      900_000,
-    ),
-    AUTH_LOGIN_LOCK_MS: asPositiveInt(
-      config.AUTH_LOGIN_LOCK_MS,
-      'AUTH_LOGIN_LOCK_MS',
-      900_000,
-    ),
-    EMAIL_VERIFICATION_TOKEN_TTL_MS: asPositiveInt(
-      config.EMAIL_VERIFICATION_TOKEN_TTL_MS,
+    AUTH_LOGIN_MAX_ATTEMPTS: positiveIntWithDefault('AUTH_LOGIN_MAX_ATTEMPTS', 5),
+    AUTH_LOGIN_WINDOW_MS: positiveIntWithDefault('AUTH_LOGIN_WINDOW_MS', 900_000),
+    AUTH_LOGIN_LOCK_MS: positiveIntWithDefault('AUTH_LOGIN_LOCK_MS', 900_000),
+    EMAIL_VERIFICATION_TOKEN_TTL_MS: positiveIntWithDefault(
       'EMAIL_VERIFICATION_TOKEN_TTL_MS',
       86_400_000,
     ),
-    SMTP_HOST: asString(config.SMTP_HOST),
-    SMTP_PORT: asPositiveInt(config.SMTP_PORT, 'SMTP_PORT', 587),
-    SMTP_SECURE: asBoolean(config.SMTP_SECURE, false),
-    SMTP_USER: asString(config.SMTP_USER),
-    SMTP_PASS: asString(config.SMTP_PASS),
-    MAIL_FROM: asString(config.MAIL_FROM),
-    EMAIL_SEND_RETRY_MAX_ATTEMPTS: asPositiveInt(
-      config.EMAIL_SEND_RETRY_MAX_ATTEMPTS,
+    SMTP_HOST: optionalString(),
+    SMTP_PORT: positiveIntWithDefault('SMTP_PORT', 587),
+    SMTP_SECURE: booleanWithDefault('SMTP_SECURE', false),
+    SMTP_USER: optionalString(),
+    SMTP_PASS: optionalString(),
+    MAIL_FROM: optionalString(),
+    EMAIL_SEND_RETRY_MAX_ATTEMPTS: positiveIntWithDefault(
       'EMAIL_SEND_RETRY_MAX_ATTEMPTS',
       3,
     ),
-    EMAIL_SEND_RETRY_DELAY_MS: asPositiveInt(
-      config.EMAIL_SEND_RETRY_DELAY_MS,
+    EMAIL_SEND_RETRY_DELAY_MS: positiveIntWithDefault(
       'EMAIL_SEND_RETRY_DELAY_MS',
       750,
     ),
-    CHAIN_ACCEPT_TTL_HOURS: asPositiveInt(
-      config.CHAIN_ACCEPT_TTL_HOURS,
-      'CHAIN_ACCEPT_TTL_HOURS',
-      24,
-    ),
-    CHAIN_EXPIRE_SWEEP_LIMIT: asPositiveInt(
-      config.CHAIN_EXPIRE_SWEEP_LIMIT,
+    CHAIN_ACCEPT_TTL_HOURS: positiveIntWithDefault('CHAIN_ACCEPT_TTL_HOURS', 24),
+    CHAIN_EXPIRE_SWEEP_LIMIT: positiveIntWithDefault(
       'CHAIN_EXPIRE_SWEEP_LIMIT',
       50,
     ),
-    INTEREST_REQUEST_TTL_HOURS: asPositiveInt(
-      config.INTEREST_REQUEST_TTL_HOURS,
+    INTEREST_REQUEST_TTL_HOURS: positiveIntWithDefault(
       'INTEREST_REQUEST_TTL_HOURS',
       48,
     ),
-    INTEREST_EXPIRE_SWEEP_LIMIT: asPositiveInt(
-      config.INTEREST_EXPIRE_SWEEP_LIMIT,
+    INTEREST_EXPIRE_SWEEP_LIMIT: positiveIntWithDefault(
       'INTEREST_EXPIRE_SWEEP_LIMIT',
       100,
     ),
-    LISTING_ACTIVE_TTL_HOURS: asPositiveInt(
-      config.LISTING_ACTIVE_TTL_HOURS,
-      'LISTING_ACTIVE_TTL_HOURS',
-      336,
-    ),
-    LISTING_EXPIRE_SWEEP_LIMIT: asPositiveInt(
-      config.LISTING_EXPIRE_SWEEP_LIMIT,
+    LISTING_ACTIVE_TTL_HOURS: positiveIntWithDefault('LISTING_ACTIVE_TTL_HOURS', 336),
+    LISTING_EXPIRE_SWEEP_LIMIT: positiveIntWithDefault(
       'LISTING_EXPIRE_SWEEP_LIMIT',
       100,
     ),
-    INTEREST_MAX_OPEN_PER_REQUESTER: asPositiveInt(
-      config.INTEREST_MAX_OPEN_PER_REQUESTER,
+    INTEREST_MAX_OPEN_PER_REQUESTER: positiveIntWithDefault(
       'INTEREST_MAX_OPEN_PER_REQUESTER',
       25,
     ),
-    INTEREST_MAX_DAILY_REQUESTS: asPositiveInt(
-      config.INTEREST_MAX_DAILY_REQUESTS,
+    INTEREST_MAX_DAILY_REQUESTS: positiveIntWithDefault(
       'INTEREST_MAX_DAILY_REQUESTS',
       50,
     ),
-    SUBSCRIPTION_ENFORCEMENT: asBoolean(
-      config.SUBSCRIPTION_ENFORCEMENT,
+    SUBSCRIPTION_ENFORCEMENT: booleanWithDefault(
+      'SUBSCRIPTION_ENFORCEMENT',
       false,
     ),
-    TESTER_ALLOWLIST: asCsvList(config.TESTER_ALLOWLIST),
-    PAYMENT_PROVIDER: asString(config.PAYMENT_PROVIDER) ?? 'manual',
-    PAYMENT_WEBHOOK_SECRET:
-      asString(config.PAYMENT_WEBHOOK_SECRET) ?? 'dev-webhook-secret',
-    SUBSCRIPTION_DEFAULT_PLAN:
-      asString(config.SUBSCRIPTION_DEFAULT_PLAN) ?? 'basic_monthly',
-    SUBSCRIPTION_DEFAULT_AMOUNT_MINOR: asPositiveInt(
-      config.SUBSCRIPTION_DEFAULT_AMOUNT_MINOR,
+    TESTER_ALLOWLIST: csvList(),
+    PAYMENT_PROVIDER: z.any().transform((value) => {
+      if (typeof value === 'string' && value.trim()) {
+        return value.trim();
+      }
+
+      return 'manual';
+    }),
+    PAYMENT_WEBHOOK_SECRET: z.any().transform((value) => {
+      if (typeof value === 'string' && value.trim()) {
+        return value.trim();
+      }
+
+      return 'dev-webhook-secret';
+    }),
+    SUBSCRIPTION_DEFAULT_PLAN: z.any().transform((value) => {
+      if (typeof value === 'string' && value.trim()) {
+        return value.trim();
+      }
+
+      return 'basic_monthly';
+    }),
+    SUBSCRIPTION_DEFAULT_AMOUNT_MINOR: positiveIntWithDefault(
       'SUBSCRIPTION_DEFAULT_AMOUNT_MINOR',
       5000,
     ),
-    SUBSCRIPTION_DEFAULT_DURATION_DAYS: asPositiveInt(
-      config.SUBSCRIPTION_DEFAULT_DURATION_DAYS,
+    SUBSCRIPTION_DEFAULT_DURATION_DAYS: positiveIntWithDefault(
       'SUBSCRIPTION_DEFAULT_DURATION_DAYS',
       30,
     ),
-    RELIABILITY_CANCEL_SCORE_PENALTY: asPositiveInt(
-      config.RELIABILITY_CANCEL_SCORE_PENALTY,
+    RELIABILITY_CANCEL_SCORE_PENALTY: positiveIntWithDefault(
       'RELIABILITY_CANCEL_SCORE_PENALTY',
       5,
     ),
-    RELIABILITY_NOSHOW_SCORE_PENALTY: asPositiveInt(
-      config.RELIABILITY_NOSHOW_SCORE_PENALTY,
+    RELIABILITY_NOSHOW_SCORE_PENALTY: positiveIntWithDefault(
       'RELIABILITY_NOSHOW_SCORE_PENALTY',
       15,
     ),
-    RELIABILITY_MANUAL_SCORE_PENALTY: asPositiveInt(
-      config.RELIABILITY_MANUAL_SCORE_PENALTY,
+    RELIABILITY_MANUAL_SCORE_PENALTY: positiveIntWithDefault(
       'RELIABILITY_MANUAL_SCORE_PENALTY',
       10,
     ),
-    RELIABILITY_COOLDOWN_AFTER_CANCELLATIONS: asPositiveInt(
-      config.RELIABILITY_COOLDOWN_AFTER_CANCELLATIONS,
+    RELIABILITY_COOLDOWN_AFTER_CANCELLATIONS: positiveIntWithDefault(
       'RELIABILITY_COOLDOWN_AFTER_CANCELLATIONS',
       3,
     ),
-    RELIABILITY_COOLDOWN_HOURS: asPositiveInt(
-      config.RELIABILITY_COOLDOWN_HOURS,
+    RELIABILITY_COOLDOWN_HOURS: positiveIntWithDefault(
       'RELIABILITY_COOLDOWN_HOURS',
       24,
     ),
-    RELIABILITY_BLOCK_AFTER_NOSHOWS: asPositiveInt(
-      config.RELIABILITY_BLOCK_AFTER_NOSHOWS,
+    RELIABILITY_BLOCK_AFTER_NOSHOWS: positiveIntWithDefault(
       'RELIABILITY_BLOCK_AFTER_NOSHOWS',
       2,
     ),
-    RELIABILITY_BLOCK_HOURS: asPositiveInt(
-      config.RELIABILITY_BLOCK_HOURS,
+    RELIABILITY_BLOCK_HOURS: positiveIntWithDefault(
       'RELIABILITY_BLOCK_HOURS',
       72,
     ),
-    RELIABILITY_RANK_PENALTY_WEIGHT: asPositiveInt(
-      config.RELIABILITY_RANK_PENALTY_WEIGHT,
+    RELIABILITY_RANK_PENALTY_WEIGHT: positiveIntWithDefault(
       'RELIABILITY_RANK_PENALTY_WEIGHT',
       25,
     ),
-  };
+  })
+  .passthrough();
+
+export function validateEnv(config: RawEnv): RawEnv {
+  const parsed = envSchema.safeParse(config);
+
+  if (!parsed.success) {
+    const message = parsed.error.issues
+      .map((issue) => {
+        const path = issue.path.join('.');
+        return path ? `${path}: ${issue.message}` : issue.message;
+      })
+      .join('; ');
+
+    throw new Error(message);
+  }
+
+  return parsed.data;
 }
