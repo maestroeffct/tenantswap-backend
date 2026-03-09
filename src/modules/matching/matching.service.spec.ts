@@ -142,9 +142,9 @@ describe('MatchingService', () => {
       currentCity: 'Abuja',
       currentType: '1 Bedroom',
       currentRent: 700,
-      availableOn: new Date('2026-03-01T00:00:00.000Z'),
+      availableOn: new Date('2099-03-01T00:00:00.000Z'),
       features: ['parking', 'security'],
-      expiresAt: new Date('2026-03-08T00:00:00.000Z'),
+      expiresAt: new Date('2099-03-08T00:00:00.000Z'),
     };
 
     const listingB = {
@@ -158,9 +158,9 @@ describe('MatchingService', () => {
       currentCity: 'Lagos',
       currentType: '2 Bedroom',
       currentRent: 900,
-      availableOn: new Date('2026-03-08T00:00:00.000Z'),
+      availableOn: new Date('2099-03-08T00:00:00.000Z'),
       features: ['security', 'balcony'],
-      expiresAt: new Date('2026-03-15T00:00:00.000Z'),
+      expiresAt: new Date('2099-03-15T00:00:00.000Z'),
     };
 
     prismaMock.swapListing.findUnique.mockResolvedValue(listingA);
@@ -178,8 +178,8 @@ describe('MatchingService', () => {
       cycleSize: 2,
       avgScore: 74,
       cycleHash: 'A-B',
-      acceptBy: new Date('2026-03-02T00:00:00.000Z'),
-      createdAt: new Date('2026-03-01T00:00:00.000Z'),
+      acceptBy: new Date('2099-03-02T00:00:00.000Z'),
+      createdAt: new Date('2099-03-01T00:00:00.000Z'),
       members: [
         {
           id: 'member-a',
@@ -226,9 +226,9 @@ describe('MatchingService', () => {
       currentCity: 'Abuja',
       currentType: '1 Bedroom',
       currentRent: 650,
-      availableOn: new Date('2026-03-01T00:00:00.000Z'),
+      availableOn: new Date('2099-03-01T00:00:00.000Z'),
       features: ['parking', 'security'],
-      expiresAt: new Date('2026-03-08T00:00:00.000Z'),
+      expiresAt: new Date('2099-03-08T00:00:00.000Z'),
     };
 
     const listingB = {
@@ -242,9 +242,9 @@ describe('MatchingService', () => {
       currentCity: 'Lagos',
       currentType: '2 Bedroom',
       currentRent: 1100,
-      availableOn: new Date('2026-03-12T00:00:00.000Z'),
+      availableOn: new Date('2099-03-12T00:00:00.000Z'),
       features: ['security'],
-      expiresAt: new Date('2026-03-20T00:00:00.000Z'),
+      expiresAt: new Date('2099-03-20T00:00:00.000Z'),
     };
 
     const listingC = {
@@ -258,9 +258,9 @@ describe('MatchingService', () => {
       currentCity: 'Ikeja',
       currentType: '2 Bedroom',
       currentRent: 1300,
-      availableOn: new Date('2026-03-20T00:00:00.000Z'),
+      availableOn: new Date('2099-03-20T00:00:00.000Z'),
       features: ['parking'],
-      expiresAt: new Date('2026-03-30T00:00:00.000Z'),
+      expiresAt: new Date('2099-03-30T00:00:00.000Z'),
     };
 
     prismaMock.swapListing.findUnique.mockResolvedValue(listingA);
@@ -285,6 +285,7 @@ describe('MatchingService', () => {
       result.recommendations[1].rankScore,
     );
     expect(prismaMock.swapChain.create).not.toHaveBeenCalled();
+    expect(prismaMock.swapListing.update).toHaveBeenCalledTimes(1);
   });
 
   it('returns independent state and AI tips when there are no compatible recommendations', async () => {
@@ -299,9 +300,9 @@ describe('MatchingService', () => {
       currentCity: 'Abuja',
       currentType: 'Studio',
       currentRent: 700,
-      availableOn: new Date('2026-03-01T00:00:00.000Z'),
+      availableOn: new Date('2099-03-01T00:00:00.000Z'),
       features: ['parking'],
-      expiresAt: new Date('2026-03-08T00:00:00.000Z'),
+      expiresAt: new Date('2099-03-08T00:00:00.000Z'),
     };
 
     prismaMock.swapListing.findUnique.mockResolvedValue(listingA);
@@ -316,6 +317,7 @@ describe('MatchingService', () => {
     expect(result.recommendations).toHaveLength(0);
     expect(result.aiSuggestions).toEqual(['tip']);
     expect(aiServiceMock.suggestNoMatch).toHaveBeenCalledTimes(1);
+    expect(prismaMock.swapListing.update).toHaveBeenCalledTimes(1);
   });
 
   it('creates an interest request for compatible listings', async () => {
@@ -330,9 +332,9 @@ describe('MatchingService', () => {
       currentCity: 'Lagos',
       currentType: '2 Bedroom',
       currentRent: 1000,
-      availableOn: new Date('2026-03-14T00:00:00.000Z'),
+      availableOn: new Date('2099-03-14T00:00:00.000Z'),
       features: ['security'],
-      expiresAt: new Date('2026-03-14T00:00:00.000Z'),
+      expiresAt: new Date('2099-03-14T00:00:00.000Z'),
       user: {
         id: 'owner-1',
         fullName: 'Owner One',
@@ -351,9 +353,9 @@ describe('MatchingService', () => {
       currentCity: 'Abuja',
       currentType: '1 Bedroom',
       currentRent: 700,
-      availableOn: new Date('2026-03-01T00:00:00.000Z'),
+      availableOn: new Date('2099-03-01T00:00:00.000Z'),
       features: ['parking'],
-      expiresAt: new Date('2026-03-08T00:00:00.000Z'),
+      expiresAt: new Date('2099-03-08T00:00:00.000Z'),
       user: {
         id: 'requester-1',
         fullName: 'Requester One',
@@ -369,14 +371,81 @@ describe('MatchingService', () => {
       status: 'REQUESTED',
       listingId: targetListing.id,
       requesterListingId: requesterListing.id,
-      expiresAt: new Date('2026-03-03T00:00:00.000Z'),
+      expiresAt: new Date('2099-03-03T00:00:00.000Z'),
     });
 
-    const result = await service.requestInterest(targetListing.id, 'requester-1');
+    const result = await service.requestInterest(
+      targetListing.id,
+      'requester-1',
+    );
 
     expect(result.success).toBe(true);
     expect(result.interest.status).toBe('REQUESTED');
     expect(prismaMock.listingInterest.upsert).toHaveBeenCalledTimes(1);
     expect(notificationServiceMock.notifyMany).toHaveBeenCalled();
+  });
+
+  it('notifies watchlisted user when auto-search finds new recommendations', async () => {
+    const watchListing = {
+      id: 'watch-1',
+      userId: 'user-watch',
+      lastRecommendationCount: 0,
+    };
+
+    const listingA = {
+      id: 'watch-1',
+      userId: 'user-watch',
+      status: 'ACTIVE',
+      desiredCity: 'Lagos',
+      desiredType: '2 Bedroom',
+      maxBudget: 1500,
+      timeline: '45 days',
+      currentCity: 'Abuja',
+      currentType: '1 Bedroom',
+      currentRent: 650,
+      availableOn: new Date('2099-03-01T00:00:00.000Z'),
+      features: ['parking'],
+      expiresAt: new Date('2099-03-20T00:00:00.000Z'),
+    };
+
+    const listingB = {
+      id: 'candidate-1',
+      userId: 'user-candidate',
+      status: 'ACTIVE',
+      desiredCity: 'Kaduna',
+      desiredType: '4 Bedroom',
+      maxBudget: 3000,
+      timeline: '60 days',
+      currentCity: 'Lagos',
+      currentType: '2 Bedroom',
+      currentRent: 1100,
+      availableOn: new Date('2099-03-05T00:00:00.000Z'),
+      features: ['parking', 'security'],
+      expiresAt: new Date('2099-03-25T00:00:00.000Z'),
+    };
+
+    prismaMock.swapListing.findMany
+      .mockResolvedValueOnce([watchListing])
+      .mockResolvedValueOnce([listingA, listingB]);
+    prismaMock.swapListing.findUnique.mockResolvedValue(listingA);
+    prismaMock.user.findMany.mockResolvedValue([
+      { id: 'user-watch', reliabilityScore: 100 },
+      { id: 'user-candidate', reliabilityScore: 100 },
+    ]);
+    prismaMock.matchCandidate.upsert.mockResolvedValue({});
+    prismaMock.$transaction.mockResolvedValue([]);
+
+    const result = await service.runAutoSearchSweep('SYSTEM_SWEEP');
+
+    expect(result.notified).toBe(1);
+    expect(notificationServiceMock.notifyMany).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          userId: 'user-watch',
+          type: 'AUTO_RECOMMENDATION_FOUND',
+        }),
+      ]),
+    );
+    expect(prismaMock.swapListing.update).toHaveBeenCalled();
   });
 });

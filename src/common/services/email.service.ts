@@ -7,6 +7,15 @@ export type VerificationEmailInput = {
   verificationUrl: string;
 };
 
+export type SystemEmailInput = {
+  email: string;
+  subject: string;
+  title: string;
+  message: string;
+  actionLabel?: string;
+  actionUrl?: string;
+};
+
 export type EmailDispatchResult = {
   delivered: boolean;
   provider: 'smtp' | 'log-only';
@@ -33,7 +42,8 @@ export class EmailService {
     this.fromAddress = this.config.get<string>('MAIL_FROM') ?? null;
     this.retryMaxAttempts =
       this.config.get<number>('EMAIL_SEND_RETRY_MAX_ATTEMPTS') ?? 3;
-    this.retryDelayMs = this.config.get<number>('EMAIL_SEND_RETRY_DELAY_MS') ?? 750;
+    this.retryDelayMs =
+      this.config.get<number>('EMAIL_SEND_RETRY_DELAY_MS') ?? 750;
 
     if (smtpHost && smtpUser && smtpPass && this.fromAddress) {
       this.transporter = nodemailer.createTransport({
@@ -82,6 +92,50 @@ export class EmailService {
       </div>
     `;
 
+    return this.dispatchEmail({
+      type: 'verification',
+      to: input.email,
+      subject,
+      text,
+      html,
+    });
+  }
+
+  async sendSystemEmail(input: SystemEmailInput): Promise<EmailDispatchResult> {
+    const textLines = [input.title, '', input.message];
+    if (input.actionUrl) {
+      textLines.push('', input.actionUrl);
+    }
+
+    const actionHtml =
+      input.actionLabel && input.actionUrl
+        ? `<p style="margin: 0 0 18px;"><a href="${input.actionUrl}" style="display:inline-block;padding:10px 16px;background:#0b9f6a;color:#fff;text-decoration:none;border-radius:6px;">${input.actionLabel}</a></p>`
+        : '';
+
+    const html = `
+      <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #0f172a;">
+        <h2 style="margin: 0 0 12px;">${input.title}</h2>
+        <p style="margin: 0 0 12px;">${input.message}</p>
+        ${actionHtml}
+      </div>
+    `;
+
+    return this.dispatchEmail({
+      type: 'notification',
+      to: input.email,
+      subject: input.subject,
+      text: textLines.join('\n'),
+      html,
+    });
+  }
+
+  private async dispatchEmail(input: {
+    type: 'verification' | 'notification';
+    to: string;
+    subject: string;
+    text: string;
+    html: string;
+  }): Promise<EmailDispatchResult> {
     if (!this.transporter || !this.fromAddress) {
       return {
         delivered: false,
@@ -97,14 +151,14 @@ export class EmailService {
       try {
         const response = await this.transporter.sendMail({
           from: this.fromAddress,
-          to: input.email,
-          subject,
-          text,
-          html,
+          to: input.to,
+          subject: input.subject,
+          text: input.text,
+          html: input.html,
         });
 
         this.logger.log(
-          `[EMAIL_SENT] type=verification email=${input.email} attempt=${attempt} messageId=${response.messageId}`,
+          `[EMAIL_SENT] type=${input.type} email=${input.to} attempt=${attempt} messageId=${response.messageId}`,
         );
 
         return {
@@ -116,7 +170,7 @@ export class EmailService {
       } catch (error: unknown) {
         lastError = error instanceof Error ? error.message : 'unknown_error';
         this.logger.warn(
-          `[EMAIL_SEND_RETRY] type=verification email=${input.email} attempt=${attempt} error="${lastError}"`,
+          `[EMAIL_SEND_RETRY] type=${input.type} email=${input.to} attempt=${attempt} error="${lastError}"`,
         );
 
         if (attempt < this.retryMaxAttempts) {
@@ -126,7 +180,7 @@ export class EmailService {
     }
 
     this.logger.error(
-      `[EMAIL_SEND_FAILED] type=verification email=${input.email} attempts=${this.retryMaxAttempts} error="${lastError}"`,
+      `[EMAIL_SEND_FAILED] type=${input.type} email=${input.to} attempts=${this.retryMaxAttempts} error="${lastError}"`,
     );
 
     return {

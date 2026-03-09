@@ -76,6 +76,12 @@ model SwapListing {
   closeReason       ListingCloseReason?
   closedByUserId    String?
 
+  // Automatic search tracking when listing had no initial match.
+  autoSearchEnabled       Boolean   @default(false)
+  lastRecommendationCount Int       @default(0)
+  autoSearchLastRunAt     DateTime?
+  autoSearchMatchedAt     DateTime?
+
   createdAt DateTime @default(now())
 
   user              User              @relation(fields: [userId], references: [id])

@@ -206,6 +206,13 @@ const envSchema = z
 
       return 'dnd';
     }),
+    TERMII_NOTIFICATION_CHANNEL: z.any().transform((value) => {
+      if (typeof value === 'string' && value.trim()) {
+        return value.trim();
+      }
+
+      return 'generic';
+    }),
     TERMII_PIN_ATTEMPTS: positiveIntWithDefault('TERMII_PIN_ATTEMPTS', 5),
     TERMII_PIN_TTL_MINUTES: positiveIntWithDefault(
       'TERMII_PIN_TTL_MINUTES',
@@ -226,6 +233,22 @@ const envSchema = z
     PHONE_OTP_RESEND_COOLDOWN_SECONDS: positiveIntWithDefault(
       'PHONE_OTP_RESEND_COOLDOWN_SECONDS',
       60,
+    ),
+    NOTIFICATION_EMAIL_ENABLED: booleanWithDefault(
+      'NOTIFICATION_EMAIL_ENABLED',
+      true,
+    ),
+    NOTIFICATION_SMS_ENABLED: booleanWithDefault(
+      'NOTIFICATION_SMS_ENABLED',
+      true,
+    ),
+    AUTO_SEARCH_SWEEP_ENABLED: booleanWithDefault(
+      'AUTO_SEARCH_SWEEP_ENABLED',
+      true,
+    ),
+    AUTO_SEARCH_SWEEP_LIMIT: positiveIntWithDefault(
+      'AUTO_SEARCH_SWEEP_LIMIT',
+      100,
     ),
     CHAIN_ACCEPT_TTL_HOURS: positiveIntWithDefault(
       'CHAIN_ACCEPT_TTL_HOURS',

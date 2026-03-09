@@ -34,12 +34,17 @@ Required/runtime variables currently used by the backend:
 - `TERMII_BASE_URL`
 - `TERMII_SENDER_ID`
 - `TERMII_CHANNEL`
+- `TERMII_NOTIFICATION_CHANNEL`
 - `TERMII_PIN_ATTEMPTS`
 - `TERMII_PIN_TTL_MINUTES`
 - `TERMII_PIN_LENGTH`
 - `TERMII_PIN_TYPE`
 - `TERMII_REQUEST_TIMEOUT_MS`
 - `PHONE_OTP_RESEND_COOLDOWN_SECONDS`
+- `NOTIFICATION_EMAIL_ENABLED`
+- `NOTIFICATION_SMS_ENABLED`
+- `AUTO_SEARCH_SWEEP_ENABLED`
+- `AUTO_SEARCH_SWEEP_LIMIT`
 - `CHAIN_ACCEPT_TTL_HOURS`
 - `CHAIN_EXPIRE_SWEEP_LIMIT`
 - `INTEREST_REQUEST_TTL_HOURS`
@@ -76,6 +81,7 @@ Required/runtime variables currently used by the backend:
 - Register duplicate checks now return explicit `409` conflict errors (`Email already exists`, `Phone is already used`).
 - Verification emails are sent via SMTP (HTML + text); if SMTP is unavailable, backend logs a fallback verification link.
 - Phone verification OTP uses Termii (`/auth/phone/send-otp`, `/auth/phone/resend-otp`, `/auth/phone/verify-otp`).
+- Matching notifications can now fan out to in-app + email + SMS for request/approval/decline and auto-search match discovery.
 
 Global response envelope (success and errors):
 
@@ -118,8 +124,7 @@ Error example:
 5. `POST /listings`
 6. `POST /matching/run`
 
-Creating the first listing (`POST /listings`) marks `onboardingComplete=true`.
-6. Chain accept/decline/connect endpoints as needed
+Creating the first listing (`POST /listings`) marks `onboardingComplete=true`. 6. Chain accept/decline/connect endpoints as needed
 
 ### B) One-to-Many Interest Flow (new)
 
@@ -130,7 +135,6 @@ Creating the first listing (`POST /listings`) marks `onboardingComplete=true`.
 5. Confirmation can happen by owner (`POST /matching/interests/:interestId/confirm-renter`) or by requester after approval (`POST /matching/interests/:interestId/confirm-taken`).
 6. System marks selected as `CONFIRMED_RENTER`, releases others, notifies, reruns matching.
 
-
 ### C) Subscription + Billing Flow
 
 1. User checks status: `GET /billing/me`
@@ -138,50 +142,57 @@ Creating the first listing (`POST /listings`) marks `onboardingComplete=true`.
 3. Provider posts webhook: `POST /billing/webhook`
 4. Backend updates `User.subscriptionStatus` and payment history.
 
+### D) Auto-Search Recovery Flow
+
+1. User runs matching and gets no recommendations (`INDEPENDENT`).
+2. Backend marks the listing for background auto-search.
+3. Scheduled sweep re-checks watchlisted listings.
+4. When recommendations become available, backend sends in-app + email + SMS alert and disables auto-search for that listing.
+
 ## Endpoints Summary
 
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| GET | `/` | No | Health route |
-| POST | `/auth/register` | No | Register and issue email verification token (non-prod) |
-| POST | `/auth/verify-email` | No | Verify email token and issue JWT |
-| POST | `/auth/resend-verification` | No | Resend email verification token |
-| POST | `/auth/login` | No | Login with phone + password |
-| POST | `/auth/phone/send-otp` | Yes | Send phone verification OTP via Termii |
-| POST | `/auth/phone/resend-otp` | Yes | Resend phone verification OTP |
-| POST | `/auth/phone/verify-otp` | Yes | Verify phone OTP and mark phone as verified |
-| GET | `/users/me` | Yes | Current authenticated user |
-| PATCH | `/users/me` | Yes | Update profile (fullName/email/phone) |
-| PATCH | `/users/me/password` | Yes | Change account password |
-| GET | `/users/me/reliability` | Yes | Current user reliability status |
-| GET | `/billing/me` | Yes | Subscription status + tester bypass/access state |
-| POST | `/billing/checkout` | Yes | Create checkout/payment intent metadata |
-| POST | `/billing/webhook` | No | Payment provider webhook callback |
-| POST | `/listings` | Yes | Create listing |
-| POST | `/listings/:listingId/renew` | Yes | Renew/reactivate listing expiry window |
-| GET | `/listings/me` | Yes | Get my listings |
-| POST | `/matching/run` | Yes | Run matching for latest active listing |
-| POST | `/matching/run/:listingId` | Yes | Run matching for specific listing |
-| POST | `/matching/interests/:targetListingId/request` | Yes | Request interest on a target listing |
-| GET | `/matching/interests/incoming` | Yes | Owner view of incoming interests |
-| GET | `/matching/interests/outgoing` | Yes | Requester view of sent interests |
-| POST | `/matching/interests/:interestId/approve` | Yes | Owner approves contact for interest |
-| POST | `/matching/interests/:interestId/decline` | Yes | Owner declines interest |
-| POST | `/matching/interests/:interestId/confirm-renter` | Yes | Owner confirms renter and releases others |
-| POST | `/matching/interests/:interestId/confirm-taken` | Yes | Requester confirms apartment taken after contact approval |
-| GET | `/matching/chains/me` | Yes | Get my chains |
-| GET | `/matching/chains/:chainId` | Yes | Get chain detail |
-| POST | `/matching/chains/:chainId/accept` | Yes | Accept chain |
-| POST | `/matching/chains/:chainId/decline` | Yes | Decline chain |
-| POST | `/matching/chains/:chainId/connect` | Yes | Request contact unlock |
-| POST | `/matching/connect/:unlockId/approve` | Yes | Approve contact unlock |
-| POST | `/admin/chains/expire-overdue` | Admin | Force-sweep overdue chains |
-| POST | `/admin/chains/:chainId/break` | Admin | Force break chain |
-| POST | `/admin/chains/:chainId/expire` | Admin | Force expire chain |
-| POST | `/admin/chains/:chainId/rerun` | Admin | Rerun matching for chain members |
-| GET | `/admin/users/:userId/reliability` | Admin | Get user reliability details |
-| POST | `/admin/users/:userId/penalty` | Admin | Apply manual reliability penalty |
-| POST | `/admin/users/:userId/unblock` | Admin | Clear cooldown/block restrictions |
+| Method | Path                                             | Auth  | Description                                               |
+| ------ | ------------------------------------------------ | ----- | --------------------------------------------------------- |
+| GET    | `/`                                              | No    | Health route                                              |
+| POST   | `/auth/register`                                 | No    | Register and issue email verification token (non-prod)    |
+| POST   | `/auth/verify-email`                             | No    | Verify email token and issue JWT                          |
+| POST   | `/auth/resend-verification`                      | No    | Resend email verification token                           |
+| POST   | `/auth/login`                                    | No    | Login with phone + password                               |
+| POST   | `/auth/phone/send-otp`                           | Yes   | Send phone verification OTP via Termii                    |
+| POST   | `/auth/phone/resend-otp`                         | Yes   | Resend phone verification OTP                             |
+| POST   | `/auth/phone/verify-otp`                         | Yes   | Verify phone OTP and mark phone as verified               |
+| GET    | `/users/me`                                      | Yes   | Current authenticated user                                |
+| PATCH  | `/users/me`                                      | Yes   | Update profile (fullName/email/phone)                     |
+| PATCH  | `/users/me/password`                             | Yes   | Change account password                                   |
+| GET    | `/users/me/reliability`                          | Yes   | Current user reliability status                           |
+| GET    | `/billing/me`                                    | Yes   | Subscription status + tester bypass/access state          |
+| POST   | `/billing/checkout`                              | Yes   | Create checkout/payment intent metadata                   |
+| POST   | `/billing/webhook`                               | No    | Payment provider webhook callback                         |
+| POST   | `/listings`                                      | Yes   | Create listing                                            |
+| POST   | `/listings/:listingId/renew`                     | Yes   | Renew/reactivate listing expiry window                    |
+| GET    | `/listings/me`                                   | Yes   | Get my listings                                           |
+| POST   | `/matching/run`                                  | Yes   | Run matching for latest active listing                    |
+| POST   | `/matching/run/:listingId`                       | Yes   | Run matching for specific listing                         |
+| POST   | `/matching/interests/:targetListingId/request`   | Yes   | Request interest on a target listing                      |
+| GET    | `/matching/interests/incoming`                   | Yes   | Owner view of incoming interests                          |
+| GET    | `/matching/interests/outgoing`                   | Yes   | Requester view of sent interests                          |
+| POST   | `/matching/interests/:interestId/approve`        | Yes   | Owner approves contact for interest                       |
+| POST   | `/matching/interests/:interestId/decline`        | Yes   | Owner declines interest                                   |
+| POST   | `/matching/interests/:interestId/confirm-renter` | Yes   | Owner confirms renter and releases others                 |
+| POST   | `/matching/interests/:interestId/confirm-taken`  | Yes   | Requester confirms apartment taken after contact approval |
+| GET    | `/matching/chains/me`                            | Yes   | Get my chains                                             |
+| GET    | `/matching/chains/:chainId`                      | Yes   | Get chain detail                                          |
+| POST   | `/matching/chains/:chainId/accept`               | Yes   | Accept chain                                              |
+| POST   | `/matching/chains/:chainId/decline`              | Yes   | Decline chain                                             |
+| POST   | `/matching/chains/:chainId/connect`              | Yes   | Request contact unlock                                    |
+| POST   | `/matching/connect/:unlockId/approve`            | Yes   | Approve contact unlock                                    |
+| POST   | `/admin/chains/expire-overdue`                   | Admin | Force-sweep overdue chains                                |
+| POST   | `/admin/chains/:chainId/break`                   | Admin | Force break chain                                         |
+| POST   | `/admin/chains/:chainId/expire`                  | Admin | Force expire chain                                        |
+| POST   | `/admin/chains/:chainId/rerun`                   | Admin | Rerun matching for chain members                          |
+| GET    | `/admin/users/:userId/reliability`               | Admin | Get user reliability details                              |
+| POST   | `/admin/users/:userId/penalty`                   | Admin | Apply manual reliability penalty                          |
+| POST   | `/admin/users/:userId/unblock`                   | Admin | Clear cooldown/block restrictions                         |
 
 ## Key Response Shapes
 
@@ -377,7 +388,6 @@ If open/daily request caps are exceeded, API returns `429`.
 6. Confirm renter when finalized.
 7. Use admin endpoints with an admin token when needed.
 
-
 ### POST `/listings/:listingId/renew`
 
 ```json
@@ -461,7 +471,6 @@ Request header: `x-payment-webhook-secret: <PAYMENT_WEBHOOK_SECRET>`
 
 A successful webhook marks the user subscription as `ACTIVE`.
 When subscription enforcement blocks protected endpoints, API returns `402`.
-
 
 ### PATCH `/users/me`
 

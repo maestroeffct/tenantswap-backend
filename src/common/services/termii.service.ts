@@ -26,6 +26,17 @@ export type VerifyPhoneOtpResult = {
   providerStatus: string;
 };
 
+export type SendSmsInput = {
+  to: string;
+  text: string;
+};
+
+export type SendSmsResult = {
+  delivered: boolean;
+  providerStatus: string;
+  error?: string;
+};
+
 @Injectable()
 export class TermiiService {
   private readonly logger = new Logger(TermiiService.name);
@@ -39,6 +50,7 @@ export class TermiiService {
   private readonly pinLength: number;
   private readonly pinType: string;
   private readonly requestTimeoutMs: number;
+  private readonly notificationChannel: string;
 
   constructor(private readonly config: ConfigService) {
     this.apiKey = this.config.get<string>('TERMII_API_KEY');
@@ -53,6 +65,8 @@ export class TermiiService {
     this.pinType = this.config.get<string>('TERMII_PIN_TYPE') ?? 'NUMERIC';
     this.requestTimeoutMs =
       this.config.get<number>('TERMII_REQUEST_TIMEOUT_MS') ?? 10_000;
+    this.notificationChannel =
+      this.config.get<string>('TERMII_NOTIFICATION_CHANNEL') ?? 'generic';
   }
 
   async sendOtp(input: SendPhoneOtpInput): Promise<SendPhoneOtpResult> {
@@ -88,6 +102,45 @@ export class TermiiService {
       providerStatus:
         typeof response.message === 'string' ? response.message : 'OTP_SENT',
     };
+  }
+
+  async sendSms(input: SendSmsInput): Promise<SendSmsResult> {
+    if (!this.apiKey) {
+      return {
+        delivered: false,
+        providerStatus: 'NOT_CONFIGURED',
+        error: 'termii_api_key_missing',
+      };
+    }
+
+    const payload = {
+      to: input.to,
+      from: this.senderId,
+      sms: input.text,
+      type: 'plain',
+      channel: this.notificationChannel,
+      api_key: this.apiKey,
+    };
+
+    try {
+      const response = await this.post('/api/sms/send', payload);
+      return {
+        delivered: true,
+        providerStatus:
+          typeof response.message === 'string' ? response.message : 'SMS_SENT',
+      };
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'sms_send_failed';
+      this.logger.warn(
+        `[TERMII_SMS_SEND_FAILED] to=${input.to} error="${errorMessage}"`,
+      );
+      return {
+        delivered: false,
+        providerStatus: 'FAILED',
+        error: errorMessage,
+      };
+    }
   }
 
   async verifyOtp(input: VerifyPhoneOtpInput): Promise<VerifyPhoneOtpResult> {

@@ -105,6 +105,7 @@ type ChainCreateOutcome =
 
 type RunOptions = {
   skipExpireSweep?: boolean;
+  dryRun?: boolean;
 };
 
 type SweepTrigger = 'REQUEST' | 'SYSTEM_SWEEP' | 'ADMIN_SWEEP';
@@ -158,6 +159,7 @@ export class MatchingService {
   private readonly interestMaxOpenPerRequester: number;
   private readonly interestMaxDailyRequests: number;
   private readonly reliabilityRankPenaltyWeight: number;
+  private readonly autoSearchSweepLimit: number;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -184,6 +186,8 @@ export class MatchingService {
       this.config.get<number>('INTEREST_MAX_DAILY_REQUESTS') ?? 50;
     this.reliabilityRankPenaltyWeight =
       this.config.get<number>('RELIABILITY_RANK_PENALTY_WEIGHT') ?? 25;
+    this.autoSearchSweepLimit =
+      this.config.get<number>('AUTO_SEARCH_SWEEP_LIMIT') ?? 100;
   }
 
   /* ---------------------------- scoring ---------------------------- */
@@ -261,7 +265,6 @@ export class MatchingService {
     return Math.round(5 * ratio);
   }
 
-
   private computeReliabilityPenalty(reliabilityScore: number) {
     const clampedScore = Math.max(0, Math.min(100, reliabilityScore));
     const deficit = 100 - clampedScore;
@@ -279,7 +282,12 @@ export class MatchingService {
     );
 
     const totalScore =
-      cityScore + typeScore + budgetScore + timelineScore + featureScore - reliabilityPenalty;
+      cityScore +
+      typeScore +
+      budgetScore +
+      timelineScore +
+      featureScore -
+      reliabilityPenalty;
 
     return {
       cityScore,
@@ -532,6 +540,108 @@ export class MatchingService {
     return summary;
   }
 
+  private async updateAutoSearchState(
+    listingId: string,
+    recommendationCount: number,
+  ) {
+    const now = new Date();
+
+    await this.prisma.swapListing.update({
+      where: { id: listingId },
+      data: {
+        autoSearchEnabled: recommendationCount === 0,
+        lastRecommendationCount: recommendationCount,
+        autoSearchLastRunAt: now,
+        autoSearchMatchedAt: recommendationCount > 0 ? now : null,
+      },
+    });
+  }
+
+  async runAutoSearchSweep(trigger: SweepTrigger) {
+    const now = new Date();
+
+    const watchListings = await this.prisma.swapListing.findMany({
+      where: {
+        status: 'ACTIVE',
+        autoSearchEnabled: true,
+        OR: [{ expiresAt: null }, { expiresAt: { gte: now } }],
+      },
+      orderBy: { createdAt: 'asc' },
+      take: this.autoSearchSweepLimit,
+      select: {
+        id: true,
+        userId: true,
+        lastRecommendationCount: true,
+      },
+    });
+
+    let evaluated = 0;
+    let notified = 0;
+    let failed = 0;
+
+    for (const listing of watchListings) {
+      try {
+        const result = await this.runForListing(listing.id, listing.userId, {
+          skipExpireSweep: true,
+          dryRun: true,
+        });
+        const recommendationCount = result.recommendations.length;
+
+        evaluated += 1;
+
+        if (recommendationCount > 0 && listing.lastRecommendationCount === 0) {
+          await this.notificationService.notifyMany([
+            {
+              userId: listing.userId,
+              type: 'AUTO_RECOMMENDATION_FOUND',
+              title: 'New Match Found',
+              message:
+                'Good news! We found new apartment recommendations for your listing.',
+              channels: ['IN_APP', 'EMAIL', 'SMS'],
+              payload: {
+                listingId: listing.id,
+                recommendationCount,
+              },
+            },
+          ]);
+
+          notified += 1;
+        }
+
+        await this.prisma.swapListing.update({
+          where: { id: listing.id },
+          data: {
+            lastRecommendationCount: recommendationCount,
+            autoSearchLastRunAt: now,
+            autoSearchMatchedAt: recommendationCount > 0 ? now : null,
+            autoSearchEnabled: recommendationCount === 0,
+          },
+        });
+      } catch (error: unknown) {
+        failed += 1;
+        this.logger.warn(
+          `[AUTO_SEARCH_SWEEP_FAILED] trigger=${trigger} listingId=${listing.id} error=${
+            error instanceof Error ? error.message : 'unknown'
+          }`,
+        );
+      }
+    }
+
+    if (evaluated > 0 || failed > 0) {
+      this.logger.log(
+        `[AUTO_SEARCH_SWEEP] trigger=${trigger} watched=${watchListings.length} evaluated=${evaluated} notified=${notified} failed=${failed}`,
+      );
+    }
+
+    return {
+      trigger,
+      watched: watchListings.length,
+      evaluated,
+      notified,
+      failed,
+    };
+  }
+
   private async breakChainAndRecover(
     chainId: string,
     reason: ChainBreakReason,
@@ -721,10 +831,7 @@ export class MatchingService {
 
       const staleInterests = await this.prisma.listingInterest.findMany({
         where: {
-          OR: [
-            { listingId: listing.id },
-            { requesterListingId: listing.id },
-          ],
+          OR: [{ listingId: listing.id }, { requesterListingId: listing.id }],
           status: {
             in: OPEN_INTEREST_STATUSES,
           },
@@ -1154,7 +1261,9 @@ export class MatchingService {
         },
       });
 
-      throw new BadRequestException('Listing expired. Renew it before matching');
+      throw new BadRequestException(
+        'Listing expired. Renew it before matching',
+      );
     }
 
     const listingRows = await this.prisma.swapListing.findMany({
@@ -1244,6 +1353,38 @@ export class MatchingService {
       listingById,
     );
     const stats = this.recommendationStats(recommendations);
+
+    if (!options?.dryRun) {
+      await this.updateAutoSearchState(listingId, recommendations.length);
+    }
+
+    if (options?.dryRun) {
+      if (recommendations.length === 0) {
+        return {
+          found: false,
+          message:
+            'No compatible recommendation yet. This listing is currently independent.',
+          recommendations,
+          stats,
+          matchScenario: 'INDEPENDENT',
+        };
+      }
+
+      const hasOneToOneRecommendation = recommendations.some(
+        (recommendation) => recommendation.relationship === 'ONE_TO_ONE',
+      );
+
+      return {
+        found: false,
+        message: hasOneToOneRecommendation
+          ? 'Auto-search found a direct recommendation.'
+          : 'Auto-search found one-way recommendations.',
+        recommendations,
+        stats,
+        matchScenario: hasOneToOneRecommendation ? 'ONE_TO_ONE' : 'ONE_TO_MANY',
+      };
+    }
+
     const bestDirect = this.pickBestDirectPair(listingId, graph);
 
     if (bestDirect) {
@@ -1496,7 +1637,10 @@ export class MatchingService {
       throw new BadRequestException('Target listing is no longer active');
     }
 
-    if (targetListing.expiresAt && targetListing.expiresAt.getTime() < now.getTime()) {
+    if (
+      targetListing.expiresAt &&
+      targetListing.expiresAt.getTime() < now.getTime()
+    ) {
       throw new BadRequestException('Target listing has expired');
     }
 
@@ -1652,6 +1796,7 @@ export class MatchingService {
         type: 'INTEREST_REQUESTED',
         title: 'New Request',
         message: `${requesterListing.user.fullName} requested your listing.`,
+        channels: ['IN_APP', 'EMAIL', 'SMS'],
         payload: {
           interestId: interest.id,
           listingId: targetListing.id,
@@ -1663,6 +1808,7 @@ export class MatchingService {
         type: 'INTEREST_REQUESTED',
         title: 'Request Sent',
         message: `Your request was sent to ${targetListing.user.fullName}.`,
+        channels: ['IN_APP', 'EMAIL', 'SMS'],
         payload: {
           interestId: interest.id,
           listingId: targetListing.id,
@@ -1937,6 +2083,7 @@ export class MatchingService {
         type: 'INTEREST_APPROVED',
         title: 'Contact Approved',
         message: `${interest.listing.user.fullName} approved your request. You can now contact them.`,
+        channels: ['IN_APP', 'EMAIL', 'SMS'],
         payload: {
           interestId: interest.id,
           listingId: interest.listingId,
@@ -1948,6 +2095,7 @@ export class MatchingService {
         type: 'INTEREST_APPROVED',
         title: 'Contact Shared',
         message: `You approved contact for ${interest.requesterListing.user.fullName}.`,
+        channels: ['IN_APP', 'EMAIL', 'SMS'],
         payload: {
           interestId: interest.id,
           requesterPhone: interest.requesterListing.user.phone,
@@ -2030,6 +2178,7 @@ export class MatchingService {
         type: 'INTEREST_DECLINED',
         title: 'Request Declined',
         message: `${interest.listing.user.fullName} declined your request.`,
+        channels: ['IN_APP', 'EMAIL', 'SMS'],
         payload: {
           interestId: interest.id,
           listingId: interest.listingId,
@@ -2040,6 +2189,7 @@ export class MatchingService {
         type: 'INTEREST_DECLINED',
         title: 'Request Declined',
         message: `You declined ${interest.requesterListing.user.fullName}.`,
+        channels: ['IN_APP', 'EMAIL', 'SMS'],
         payload: {
           interestId: interest.id,
         },
@@ -2363,7 +2513,11 @@ export class MatchingService {
       );
     }
 
-    return this.finalizeInterestConfirmation(interest, requesterUserId, 'WANTER');
+    return this.finalizeInterestConfirmation(
+      interest,
+      requesterUserId,
+      'WANTER',
+    );
   }
 
   /* ---------------------------- chain accept/decline ---------------------------- */
