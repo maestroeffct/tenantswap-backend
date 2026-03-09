@@ -30,6 +30,16 @@ Required/runtime variables currently used by the backend:
 - `MAIL_FROM`
 - `EMAIL_SEND_RETRY_MAX_ATTEMPTS`
 - `EMAIL_SEND_RETRY_DELAY_MS`
+- `TERMII_API_KEY`
+- `TERMII_BASE_URL`
+- `TERMII_SENDER_ID`
+- `TERMII_CHANNEL`
+- `TERMII_PIN_ATTEMPTS`
+- `TERMII_PIN_TTL_MINUTES`
+- `TERMII_PIN_LENGTH`
+- `TERMII_PIN_TYPE`
+- `TERMII_REQUEST_TIMEOUT_MS`
+- `PHONE_OTP_RESEND_COOLDOWN_SECONDS`
 - `CHAIN_ACCEPT_TTL_HOURS`
 - `CHAIN_EXPIRE_SWEEP_LIMIT`
 - `INTEREST_REQUEST_TTL_HOURS`
@@ -65,6 +75,7 @@ Required/runtime variables currently used by the backend:
 - Reliability guard blocks users in cooldown (`429`) or temporary block (`403`) windows.
 - Register duplicate checks now return explicit `409` conflict errors (`Email already exists`, `Phone is already used`).
 - Verification emails are sent via SMTP (HTML + text); if SMTP is unavailable, backend logs a fallback verification link.
+- Phone verification OTP uses Termii (`/auth/phone/send-otp`, `/auth/phone/resend-otp`, `/auth/phone/verify-otp`).
 
 Global response envelope (success and errors):
 
@@ -103,8 +114,9 @@ Error example:
 1. `POST /auth/register`
 2. `POST /auth/verify-email` (or resend + verify)
 3. `POST /auth/login`
-4. `POST /listings`
-5. `POST /matching/run`
+4. `POST /auth/phone/send-otp` + `POST /auth/phone/verify-otp` (optional but recommended)
+5. `POST /listings`
+6. `POST /matching/run`
 
 Creating the first listing (`POST /listings`) marks `onboardingComplete=true`.
 6. Chain accept/decline/connect endpoints as needed
@@ -135,6 +147,9 @@ Creating the first listing (`POST /listings`) marks `onboardingComplete=true`.
 | POST | `/auth/verify-email` | No | Verify email token and issue JWT |
 | POST | `/auth/resend-verification` | No | Resend email verification token |
 | POST | `/auth/login` | No | Login with phone + password |
+| POST | `/auth/phone/send-otp` | Yes | Send phone verification OTP via Termii |
+| POST | `/auth/phone/resend-otp` | Yes | Resend phone verification OTP |
+| POST | `/auth/phone/verify-otp` | Yes | Verify phone OTP and mark phone as verified |
 | GET | `/users/me` | Yes | Current authenticated user |
 | PATCH | `/users/me` | Yes | Update profile (fullName/email/phone) |
 | PATCH | `/users/me/password` | Yes | Change account password |
@@ -187,6 +202,42 @@ Required request body:
 
 `canConnectLandlord` and `hasLandlordContact` are required onboarding fields at registration.
 `onboardingComplete` is backend-controlled and remains `false` after registration until swap engine setup is completed.
+
+### POST `/auth/phone/send-otp`
+
+Response:
+
+```json
+{
+  "statusCode": 200,
+  "message": "OTP sent successfully",
+  "data": {
+    "expiresAt": "2026-03-05T13:00:00.000Z"
+  }
+}
+```
+
+### POST `/auth/phone/verify-otp`
+
+Request body:
+
+```json
+{
+  "pin": "123456"
+}
+```
+
+Response:
+
+```json
+{
+  "statusCode": 200,
+  "message": "Phone verified successfully",
+  "data": {
+    "phoneVerifiedAt": "2026-03-05T12:55:00.000Z"
+  }
+}
+```
 
 ### POST `/matching/run`
 

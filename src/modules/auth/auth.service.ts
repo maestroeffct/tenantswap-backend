@@ -14,6 +14,7 @@ import { createHash, randomBytes } from 'crypto';
 
 import { PrismaService } from '../../common/prisma.service';
 import { EmailService } from '../../common/services/email.service';
+import { TermiiService } from '../../common/services/termii.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ResendVerificationDto } from './dto/resend-verification.dto';
@@ -53,12 +54,15 @@ export class AuthService {
   private readonly loginLockMs: number;
   private readonly emailVerificationTokenTtlMs: number;
   private readonly frontendVerifyEmailUrl: string;
+  private readonly phoneOtpMaxAttempts: number;
+  private readonly phoneOtpResendCooldownSeconds: number;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly config: ConfigService,
     private readonly emailService: EmailService,
+    private readonly termiiService: TermiiService,
   ) {
     this.loginMaxAttempts =
       this.config.get<number>('AUTH_LOGIN_MAX_ATTEMPTS') ?? 5;
@@ -70,6 +74,10 @@ export class AuthService {
     this.frontendVerifyEmailUrl =
       this.config.get<string>('FRONTEND_VERIFY_EMAIL_URL') ??
       'http://localhost:3000/verify-email';
+    this.phoneOtpMaxAttempts =
+      this.config.get<number>('TERMII_PIN_ATTEMPTS') ?? 5;
+    this.phoneOtpResendCooldownSeconds =
+      this.config.get<number>('PHONE_OTP_RESEND_COOLDOWN_SECONDS') ?? 60;
   }
 
   async register(dto: RegisterDto, ip: string) {
@@ -180,6 +188,7 @@ export class AuthService {
         canConnectLandlord: true,
         hasLandlordContact: true,
         onboardingComplete: true,
+        phoneVerifiedAt: true,
       },
     });
 
@@ -262,6 +271,7 @@ export class AuthService {
         canConnectLandlord: user.canConnectLandlord,
         hasLandlordContact: user.hasLandlordContact,
         onboardingComplete: user.onboardingComplete,
+        phoneVerifiedAt: user.phoneVerifiedAt,
       },
     };
   }
@@ -289,6 +299,7 @@ export class AuthService {
         canConnectLandlord: true,
         hasLandlordContact: true,
         onboardingComplete: true,
+        phoneVerifiedAt: true,
       },
     });
 
@@ -379,6 +390,190 @@ export class AuthService {
       ...(this.shouldExposeVerificationToken() && verificationToken
         ? { verificationToken }
         : {}),
+    };
+  }
+
+  async sendPhoneVerificationOtp(userId: string, ip: string, resend = false) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        phone: true,
+        phoneVerifiedAt: true,
+        phoneVerificationLastSentAt: true,
+      },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    if (user.phoneVerifiedAt) {
+      return {
+        message: 'Phone is already verified',
+        phoneVerifiedAt: user.phoneVerifiedAt,
+      };
+    }
+
+    const now = new Date();
+    const lastSentAt = user.phoneVerificationLastSentAt;
+    if (lastSentAt) {
+      const elapsedSeconds = Math.floor(
+        (now.getTime() - lastSentAt.getTime()) / 1000,
+      );
+      if (elapsedSeconds < this.phoneOtpResendCooldownSeconds) {
+        const retryAfterSeconds =
+          this.phoneOtpResendCooldownSeconds - elapsedSeconds;
+        throw new HttpException(
+          {
+            message: 'Please wait before requesting another OTP',
+            meta: {
+              retryAfterSeconds,
+            },
+          },
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
+      }
+    }
+
+    const sendResult = await this.termiiService.sendOtp({ phone: user.phone });
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        phoneVerificationPinId: sendResult.pinId,
+        phoneVerificationExpiresAt: sendResult.expiresAt,
+        phoneVerificationAttempts: 0,
+        phoneVerificationLastSentAt: now,
+      },
+    });
+
+    this.audit(resend ? 'phone_otp_resent' : 'phone_otp_sent', {
+      ip,
+      userId: user.id,
+      phone: user.phone,
+      expiresAt: sendResult.expiresAt.toISOString(),
+      providerStatus: sendResult.providerStatus,
+    });
+
+    return {
+      message: resend ? 'OTP resent successfully' : 'OTP sent successfully',
+      expiresAt: sendResult.expiresAt,
+    };
+  }
+
+  async verifyPhoneVerificationOtp(userId: string, pin: string, ip: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        phone: true,
+        phoneVerifiedAt: true,
+        phoneVerificationPinId: true,
+        phoneVerificationExpiresAt: true,
+        phoneVerificationAttempts: true,
+      },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    if (user.phoneVerifiedAt) {
+      return {
+        message: 'Phone is already verified',
+        phoneVerifiedAt: user.phoneVerifiedAt,
+      };
+    }
+
+    if (!user.phoneVerificationPinId || !user.phoneVerificationExpiresAt) {
+      throw new BadRequestException('Request OTP first');
+    }
+
+    if (user.phoneVerificationExpiresAt <= new Date()) {
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: {
+          phoneVerificationPinId: null,
+          phoneVerificationExpiresAt: null,
+          phoneVerificationAttempts: 0,
+        },
+      });
+      throw new BadRequestException('OTP has expired. Request a new one');
+    }
+
+    if (user.phoneVerificationAttempts >= this.phoneOtpMaxAttempts) {
+      throw new HttpException(
+        {
+          message: 'Too many invalid OTP attempts. Request a new OTP',
+          meta: {
+            attemptsAllowed: this.phoneOtpMaxAttempts,
+          },
+        },
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    const verifyResult = await this.termiiService.verifyOtp({
+      pinId: user.phoneVerificationPinId,
+      pin,
+    });
+
+    if (!verifyResult.verified) {
+      const updated = await this.prisma.user.update({
+        where: { id: user.id },
+        data: {
+          phoneVerificationAttempts: {
+            increment: 1,
+          },
+        },
+        select: {
+          phoneVerificationAttempts: true,
+        },
+      });
+
+      const remainingAttempts = Math.max(
+        this.phoneOtpMaxAttempts - updated.phoneVerificationAttempts,
+        0,
+      );
+
+      this.audit('phone_otp_verify_failed', {
+        ip,
+        userId: user.id,
+        remainingAttempts,
+        providerStatus: verifyResult.providerStatus,
+      });
+
+      throw new BadRequestException({
+        message: 'Invalid OTP',
+        meta: {
+          remainingAttempts,
+        },
+      });
+    }
+
+    const now = new Date();
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        phoneVerifiedAt: now,
+        phoneVerificationPinId: null,
+        phoneVerificationExpiresAt: null,
+        phoneVerificationAttempts: 0,
+      },
+    });
+
+    this.audit('phone_verified', {
+      ip,
+      userId: user.id,
+      phone: user.phone,
+      providerStatus: verifyResult.providerStatus,
+    });
+
+    return {
+      message: 'Phone verified successfully',
+      phoneVerifiedAt: now,
     };
   }
 

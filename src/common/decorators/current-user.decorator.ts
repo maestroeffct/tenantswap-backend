@@ -22,6 +22,7 @@ export type CurrentUserPayload = {
   canConnectLandlord: boolean;
   hasLandlordContact: boolean;
   onboardingComplete: boolean;
+  phoneVerifiedAt: Date | null;
 };
 
 export const CurrentUser = createParamDecorator(

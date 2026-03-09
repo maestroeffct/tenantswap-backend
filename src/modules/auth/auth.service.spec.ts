@@ -4,6 +4,7 @@ import { JwtService } from '@nestjs/jwt';
 
 import { PrismaService } from '../../common/prisma.service';
 import { EmailService } from '../../common/services/email.service';
+import { TermiiService } from '../../common/services/termii.service';
 import { AuthService } from './auth.service';
 
 describe('AuthService', () => {
@@ -35,12 +36,17 @@ describe('AuthService', () => {
   };
 
   const emailServiceMock = {
-    sendVerificationEmail: jest.fn(async () => ({
+    sendVerificationEmail: jest.fn(() => ({
       delivered: true,
       provider: 'smtp',
       attempts: 1,
       messageId: 'msg-1',
     })),
+  };
+
+  const termiiServiceMock = {
+    sendOtp: jest.fn(),
+    verifyOtp: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -62,6 +68,10 @@ describe('AuthService', () => {
         {
           provide: EmailService,
           useValue: emailServiceMock,
+        },
+        {
+          provide: TermiiService,
+          useValue: termiiServiceMock,
         },
       ],
     }).compile();

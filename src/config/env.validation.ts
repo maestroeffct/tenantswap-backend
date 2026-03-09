@@ -106,7 +106,8 @@ const jwtExpiresIn = z.any().transform((value, ctx) => {
   if (!/^\d+[smhd]$/.test(resolved)) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      message: 'JWT_EXPIRES_IN must look like 15m, 1h, or 7d (number + s|m|h|d)',
+      message:
+        'JWT_EXPIRES_IN must look like 15m, 1h, or 7d (number + s|m|h|d)',
     });
     return z.NEVER;
   }
@@ -156,8 +157,14 @@ const envSchema = z
       'THROTTLE_MATCH_RUN_LIMIT',
       10,
     ),
-    AUTH_LOGIN_MAX_ATTEMPTS: positiveIntWithDefault('AUTH_LOGIN_MAX_ATTEMPTS', 5),
-    AUTH_LOGIN_WINDOW_MS: positiveIntWithDefault('AUTH_LOGIN_WINDOW_MS', 900_000),
+    AUTH_LOGIN_MAX_ATTEMPTS: positiveIntWithDefault(
+      'AUTH_LOGIN_MAX_ATTEMPTS',
+      5,
+    ),
+    AUTH_LOGIN_WINDOW_MS: positiveIntWithDefault(
+      'AUTH_LOGIN_WINDOW_MS',
+      900_000,
+    ),
     AUTH_LOGIN_LOCK_MS: positiveIntWithDefault('AUTH_LOGIN_LOCK_MS', 900_000),
     EMAIL_VERIFICATION_TOKEN_TTL_MS: positiveIntWithDefault(
       'EMAIL_VERIFICATION_TOKEN_TTL_MS',
@@ -177,7 +184,53 @@ const envSchema = z
       'EMAIL_SEND_RETRY_DELAY_MS',
       750,
     ),
-    CHAIN_ACCEPT_TTL_HOURS: positiveIntWithDefault('CHAIN_ACCEPT_TTL_HOURS', 24),
+    TERMII_API_KEY: optionalString(),
+    TERMII_BASE_URL: z.any().transform((value) => {
+      if (typeof value === 'string' && value.trim()) {
+        return value.trim();
+      }
+
+      return 'https://api.ng.termii.com';
+    }),
+    TERMII_SENDER_ID: z.any().transform((value) => {
+      if (typeof value === 'string' && value.trim()) {
+        return value.trim();
+      }
+
+      return 'TenantSwap';
+    }),
+    TERMII_CHANNEL: z.any().transform((value) => {
+      if (typeof value === 'string' && value.trim()) {
+        return value.trim();
+      }
+
+      return 'dnd';
+    }),
+    TERMII_PIN_ATTEMPTS: positiveIntWithDefault('TERMII_PIN_ATTEMPTS', 5),
+    TERMII_PIN_TTL_MINUTES: positiveIntWithDefault(
+      'TERMII_PIN_TTL_MINUTES',
+      10,
+    ),
+    TERMII_PIN_LENGTH: positiveIntWithDefault('TERMII_PIN_LENGTH', 6),
+    TERMII_PIN_TYPE: z.any().transform((value) => {
+      if (typeof value === 'string' && value.trim()) {
+        return value.trim().toUpperCase();
+      }
+
+      return 'NUMERIC';
+    }),
+    TERMII_REQUEST_TIMEOUT_MS: positiveIntWithDefault(
+      'TERMII_REQUEST_TIMEOUT_MS',
+      10_000,
+    ),
+    PHONE_OTP_RESEND_COOLDOWN_SECONDS: positiveIntWithDefault(
+      'PHONE_OTP_RESEND_COOLDOWN_SECONDS',
+      60,
+    ),
+    CHAIN_ACCEPT_TTL_HOURS: positiveIntWithDefault(
+      'CHAIN_ACCEPT_TTL_HOURS',
+      24,
+    ),
     CHAIN_EXPIRE_SWEEP_LIMIT: positiveIntWithDefault(
       'CHAIN_EXPIRE_SWEEP_LIMIT',
       50,
@@ -190,7 +243,10 @@ const envSchema = z
       'INTEREST_EXPIRE_SWEEP_LIMIT',
       100,
     ),
-    LISTING_ACTIVE_TTL_HOURS: positiveIntWithDefault('LISTING_ACTIVE_TTL_HOURS', 336),
+    LISTING_ACTIVE_TTL_HOURS: positiveIntWithDefault(
+      'LISTING_ACTIVE_TTL_HOURS',
+      336,
+    ),
     LISTING_EXPIRE_SWEEP_LIMIT: positiveIntWithDefault(
       'LISTING_EXPIRE_SWEEP_LIMIT',
       100,

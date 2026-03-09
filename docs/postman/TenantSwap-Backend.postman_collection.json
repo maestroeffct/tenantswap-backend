@@ -82,6 +82,21 @@
     {
       "key": "offenderUserId",
       "value": ""
+    },
+    {
+      "key": "phoneOtpPin",
+      "value": "123456",
+      "type": "default"
+    },
+    {
+      "key": "canConnectLandlord",
+      "value": "true",
+      "type": "default"
+    },
+    {
+      "key": "hasLandlordContact",
+      "value": "true",
+      "type": "default"
     }
   ],
   "item": [
@@ -123,7 +138,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"fullName\": \"Ada Lovelace\",\n  \"email\": \"{{email}}\",\n  \"phone\": \"{{phone}}\",\n  \"password\": \"{{password}}\",\n  \"canConnectLandlord\": true,\n  \"hasLandlordContact\": true\n}"
+              "raw": "{\n  \"fullName\": \"Ada Lovelace\",\n  \"email\": \"{{email}}\",\n  \"phone\": \"{{phone}}\",\n  \"password\": \"{{password}}\",\n  \"canConnectLandlord\": {{canConnectLandlord}},\n  \"hasLandlordContact\": {{hasLandlordContact}}\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/auth/register",
@@ -284,6 +299,112 @@
               }
             }
           ]
+        },
+        {
+          "name": "POST /auth/phone/send-otp",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/phone/send-otp",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "phone",
+                "send-otp"
+              ]
+            },
+            "description": "Send phone verification OTP to logged in user via Termii."
+          }
+        },
+        {
+          "name": "POST /auth/phone/resend-otp",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/phone/resend-otp",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "phone",
+                "resend-otp"
+              ]
+            },
+            "description": "Resend phone verification OTP (cooldown applies)."
+          }
+        },
+        {
+          "name": "POST /auth/phone/verify-otp",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pin\": \"{{phoneOtpPin}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/phone/verify-otp",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "phone",
+                "verify-otp"
+              ]
+            },
+            "description": "Verify phone OTP and mark phone as verified."
+          }
         }
       ]
     },

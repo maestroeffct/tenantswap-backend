@@ -34,6 +34,7 @@ export class UsersService {
         email: true,
         phone: true,
         password: true,
+        phoneVerifiedAt: true,
         canConnectLandlord: true,
         hasLandlordContact: true,
         onboardingComplete: true,
@@ -83,6 +84,11 @@ export class UsersService {
 
     if (changesPhone && nextPhone) {
       data.phone = nextPhone;
+      data.phoneVerifiedAt = null;
+      data.phoneVerificationPinId = null;
+      data.phoneVerificationExpiresAt = null;
+      data.phoneVerificationAttempts = 0;
+      data.phoneVerificationLastSentAt = null;
     }
 
     if (changesCanConnectLandlord && nextCanConnectLandlord !== undefined) {
@@ -132,6 +138,7 @@ export class UsersService {
           canConnectLandlord: true,
           hasLandlordContact: true,
           onboardingComplete: true,
+          phoneVerifiedAt: true,
           createdAt: true,
         },
       });
@@ -209,6 +216,7 @@ export class UsersService {
         canConnectLandlord: true,
         hasLandlordContact: true,
         onboardingComplete: true,
+        phoneVerifiedAt: true,
         createdAt: true,
       },
     });

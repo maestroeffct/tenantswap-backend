@@ -8,30 +8,35 @@ datasource db {
 }
 
 model User {
-  id                         String             @id @default(uuid())
-  role                       UserRole           @default(USER)
-  fullName                   String
-  email                      String?            @unique
-  phone                      String             @unique
-  password                   String
-  emailVerifiedAt            DateTime?
-  emailVerificationTokenHash String?
-  emailVerificationExpiresAt DateTime?
-  subscriptionStatus         SubscriptionStatus @default(INACTIVE)
-  subscriptionPlan           String?
-  subscriptionProvider       String?
-  subscriptionReference      String?
-  subscriptionStartedAt      DateTime?
-  subscriptionExpiresAt      DateTime?
-  reliabilityScore           Int                @default(100)
-  cancellationCount          Int                @default(0)
-  noShowCount                Int                @default(0)
-  cooldownUntil              DateTime?
-  blockedUntil               DateTime?
-  canConnectLandlord         Boolean            @default(false)
-  hasLandlordContact         Boolean            @default(false)
-  onboardingComplete         Boolean            @default(false)
-  createdAt                  DateTime           @default(now())
+  id                          String             @id @default(uuid())
+  role                        UserRole           @default(USER)
+  fullName                    String
+  email                       String?            @unique
+  phone                       String             @unique
+  password                    String
+  emailVerifiedAt             DateTime?
+  emailVerificationTokenHash  String?
+  emailVerificationExpiresAt  DateTime?
+  subscriptionStatus          SubscriptionStatus @default(INACTIVE)
+  subscriptionPlan            String?
+  subscriptionProvider        String?
+  subscriptionReference       String?
+  subscriptionStartedAt       DateTime?
+  subscriptionExpiresAt       DateTime?
+  reliabilityScore            Int                @default(100)
+  cancellationCount           Int                @default(0)
+  noShowCount                 Int                @default(0)
+  cooldownUntil               DateTime?
+  blockedUntil                DateTime?
+  canConnectLandlord          Boolean            @default(false)
+  hasLandlordContact          Boolean            @default(false)
+  onboardingComplete          Boolean            @default(false)
+  phoneVerifiedAt             DateTime?
+  phoneVerificationPinId      String?
+  phoneVerificationExpiresAt  DateTime?
+  phoneVerificationAttempts   Int                @default(0)
+  phoneVerificationLastSentAt DateTime?
+  createdAt                   DateTime           @default(now())
 
   listings            SwapListing[]
   notifications       UserNotification[]
