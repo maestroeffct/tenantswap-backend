@@ -35,6 +35,11 @@ export class UsersService {
         phone: true,
         password: true,
         phoneVerifiedAt: true,
+        profilePhotoUrl: true,
+        gender: true,
+        occupation: true,
+        allowIncomingCalls: true,
+        oauthProvider: true,
         canConnectLandlord: true,
         hasLandlordContact: true,
         onboardingComplete: true,
@@ -48,12 +53,27 @@ export class UsersService {
     const nextFullName = dto.fullName?.trim();
     const nextEmail = dto.email ? this.normalizeEmail(dto.email) : undefined;
     const nextPhone = dto.phone ? this.normalizePhone(dto.phone) : undefined;
+    const nextProfilePhotoUrl = dto.profilePhotoUrl?.trim();
+    const nextGender = dto.gender ? this.mapGender(dto.gender) : undefined;
+    const nextOccupation = dto.occupation?.trim();
+    const nextAllowIncomingCalls = dto.allowIncomingCalls;
     const nextCanConnectLandlord = dto.canConnectLandlord;
     const nextHasLandlordContact = dto.hasLandlordContact;
 
     const changesEmail =
       nextEmail !== undefined && nextEmail !== (user.email ?? null);
     const changesPhone = nextPhone !== undefined && nextPhone !== user.phone;
+    const changesProfilePhotoUrl =
+      nextProfilePhotoUrl !== undefined &&
+      nextProfilePhotoUrl !== (user.profilePhotoUrl ?? null);
+    const changesGender =
+      nextGender !== undefined && nextGender !== (user.gender ?? null);
+    const changesOccupation =
+      nextOccupation !== undefined &&
+      nextOccupation !== (user.occupation ?? null);
+    const changesAllowIncomingCalls =
+      nextAllowIncomingCalls !== undefined &&
+      nextAllowIncomingCalls !== user.allowIncomingCalls;
     const changesCanConnectLandlord =
       nextCanConnectLandlord !== undefined &&
       nextCanConnectLandlord !== user.canConnectLandlord;
@@ -89,6 +109,22 @@ export class UsersService {
       data.phoneVerificationExpiresAt = null;
       data.phoneVerificationAttempts = 0;
       data.phoneVerificationLastSentAt = null;
+    }
+
+    if (changesProfilePhotoUrl && nextProfilePhotoUrl !== undefined) {
+      data.profilePhotoUrl = nextProfilePhotoUrl || null;
+    }
+
+    if (changesGender && nextGender !== undefined) {
+      data.gender = nextGender;
+    }
+
+    if (changesOccupation && nextOccupation !== undefined) {
+      data.occupation = nextOccupation || null;
+    }
+
+    if (changesAllowIncomingCalls && nextAllowIncomingCalls !== undefined) {
+      data.allowIncomingCalls = nextAllowIncomingCalls;
     }
 
     if (changesCanConnectLandlord && nextCanConnectLandlord !== undefined) {
@@ -135,6 +171,11 @@ export class UsersService {
           noShowCount: true,
           cooldownUntil: true,
           blockedUntil: true,
+          profilePhotoUrl: true,
+          gender: true,
+          occupation: true,
+          allowIncomingCalls: true,
+          oauthProvider: true,
           canConnectLandlord: true,
           hasLandlordContact: true,
           onboardingComplete: true,
@@ -213,6 +254,10 @@ export class UsersService {
         noShowCount: true,
         cooldownUntil: true,
         blockedUntil: true,
+        profilePhotoUrl: true,
+        gender: true,
+        occupation: true,
+        allowIncomingCalls: true,
         canConnectLandlord: true,
         hasLandlordContact: true,
         onboardingComplete: true,
@@ -233,6 +278,15 @@ export class UsersService {
   private shouldExposeVerificationToken(): boolean {
     const nodeEnv = this.config.get<string>('NODE_ENV') ?? 'development';
     return nodeEnv !== 'production';
+  }
+
+  private mapGender(
+    gender: 'male' | 'female' | 'other' | 'prefer_not_to_say',
+  ): 'MALE' | 'FEMALE' | 'OTHER' | 'PREFER_NOT_TO_SAY' {
+    if (gender === 'male') return 'MALE';
+    if (gender === 'female') return 'FEMALE';
+    if (gender === 'other') return 'OTHER';
+    return 'PREFER_NOT_TO_SAY';
   }
 
   private normalizePhone(phone: string): string {

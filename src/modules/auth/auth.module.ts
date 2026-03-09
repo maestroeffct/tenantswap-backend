@@ -4,6 +4,7 @@ import { JwtModule } from '@nestjs/jwt';
 
 import { PrismaService } from '../../common/prisma.service';
 import { EmailService } from '../../common/services/email.service';
+import { OauthService } from '../../common/services/oauth.service';
 import { TermiiService } from '../../common/services/termii.service';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
@@ -45,6 +46,12 @@ function parseJwtExpiresInToSeconds(value: string): number {
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, PrismaService, EmailService, TermiiService],
+  providers: [
+    AuthService,
+    PrismaService,
+    EmailService,
+    TermiiService,
+    OauthService,
+  ],
 })
 export class AuthModule {}

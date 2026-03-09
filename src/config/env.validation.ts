@@ -138,6 +138,7 @@ const envSchema = z
 
       return 'http://localhost:3000/verify-email';
     }),
+    GOOGLE_OAUTH_CLIENT_ID: optionalString(),
     PORT: positiveIntWithDefault('PORT', 3000),
     THROTTLE_GLOBAL_TTL_MS: positiveIntWithDefault(
       'THROTTLE_GLOBAL_TTL_MS',

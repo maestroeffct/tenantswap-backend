@@ -2,8 +2,10 @@ import { Transform } from 'class-transformer';
 import {
   IsBoolean,
   IsEmail,
-  IsNotEmpty,
+  IsIn,
+  IsOptional,
   IsString,
+  IsUrl,
   Matches,
   MaxLength,
   MinLength,
@@ -30,20 +32,28 @@ function toBoolean(value: unknown): unknown {
 
 export class RegisterDto {
   @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim().toLowerCase() : value,
+  )
+  @IsOptional()
+  @IsIn(['password', 'oauth'])
+  authType?: 'password' | 'oauth';
+
+  @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' ? value.trim() : value,
   )
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
   @MinLength(2)
   @MaxLength(100)
-  fullName: string;
+  fullName?: string;
 
   @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' ? value.trim().toLowerCase() : value,
   )
+  @IsOptional()
   @IsEmail()
   @MaxLength(254)
-  email: string;
+  email?: string;
 
   @Transform(({ value }: { value: unknown }) => {
     if (typeof value !== 'string') {
@@ -57,13 +67,14 @@ export class RegisterDto {
 
     return cleaned.startsWith('+') ? cleaned : `+${cleaned}`;
   })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
   @Matches(/^\+[1-9]\d{7,14}$/, {
     message: 'phone must be in international E.164 format',
   })
-  phone: string;
+  phone?: string;
 
+  @IsOptional()
   @IsString()
   @MinLength(8)
   @MaxLength(128)
@@ -71,13 +82,58 @@ export class RegisterDto {
     message:
       'password must include uppercase, lowercase, number, and special character',
   })
-  password: string;
+  password?: string;
+
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim().toLowerCase() : value,
+  )
+  @IsOptional()
+  @IsIn(['google', 'apple'])
+  oauthProvider?: 'google' | 'apple';
+
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  @IsOptional()
+  @IsString()
+  @MinLength(20)
+  oauthIdToken?: string;
 
   @Transform(({ value }: { value: unknown }) => toBoolean(value))
+  @IsOptional()
   @IsBoolean()
-  canConnectLandlord: boolean;
+  allowIncomingCalls?: boolean;
 
   @Transform(({ value }: { value: unknown }) => toBoolean(value))
+  @IsOptional()
   @IsBoolean()
-  hasLandlordContact: boolean;
+  canConnectLandlord?: boolean;
+
+  @Transform(({ value }: { value: unknown }) => toBoolean(value))
+  @IsOptional()
+  @IsBoolean()
+  hasLandlordContact?: boolean;
+
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  @IsOptional()
+  @IsUrl({ require_tld: false })
+  @MaxLength(2048)
+  profilePhotoUrl?: string;
+
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim().toLowerCase() : value,
+  )
+  @IsOptional()
+  @IsIn(['male', 'female', 'other', 'prefer_not_to_say'])
+  gender?: 'male' | 'female' | 'other' | 'prefer_not_to_say';
+
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  occupation?: string;
 }

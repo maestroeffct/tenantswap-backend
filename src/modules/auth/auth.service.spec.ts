@@ -4,6 +4,7 @@ import { JwtService } from '@nestjs/jwt';
 
 import { PrismaService } from '../../common/prisma.service';
 import { EmailService } from '../../common/services/email.service';
+import { OauthService } from '../../common/services/oauth.service';
 import { TermiiService } from '../../common/services/termii.service';
 import { AuthService } from './auth.service';
 
@@ -49,6 +50,10 @@ describe('AuthService', () => {
     verifyOtp: jest.fn(),
   };
 
+  const oauthServiceMock = {
+    verifyIdentityToken: jest.fn(),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -72,6 +77,10 @@ describe('AuthService', () => {
         {
           provide: TermiiService,
           useValue: termiiServiceMock,
+        },
+        {
+          provide: OauthService,
+          useValue: oauthServiceMock,
         },
       ],
     }).compile();

@@ -14,6 +14,10 @@ import { createHash, randomBytes } from 'crypto';
 
 import { PrismaService } from '../../common/prisma.service';
 import { EmailService } from '../../common/services/email.service';
+import {
+  OauthService,
+  type OAuthProviderType,
+} from '../../common/services/oauth.service';
 import { TermiiService } from '../../common/services/termii.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
@@ -63,6 +67,7 @@ export class AuthService {
     private readonly config: ConfigService,
     private readonly emailService: EmailService,
     private readonly termiiService: TermiiService,
+    private readonly oauthService: OauthService,
   ) {
     this.loginMaxAttempts =
       this.config.get<number>('AUTH_LOGIN_MAX_ATTEMPTS') ?? 5;
@@ -81,6 +86,18 @@ export class AuthService {
   }
 
   async register(dto: RegisterDto, ip: string) {
+    const authType = dto.authType === 'oauth' ? 'oauth' : 'password';
+
+    if (authType === 'oauth') {
+      return this.registerOrLoginWithOauth(dto, ip);
+    }
+
+    if (!dto.email || !dto.fullName || !dto.phone || !dto.password) {
+      throw new BadRequestException(
+        'email, fullName, phone, and password are required for password registration',
+      );
+    }
+
     const normalizedPhone = this.normalizePhone(dto.phone);
     const normalizedEmail = this.normalizeEmail(dto.email);
 
@@ -122,8 +139,12 @@ export class AuthService {
         email: normalizedEmail,
         phone: normalizedPhone,
         password: hashedPassword,
-        canConnectLandlord: dto.canConnectLandlord,
-        hasLandlordContact: dto.hasLandlordContact,
+        allowIncomingCalls: dto.allowIncomingCalls ?? false,
+        canConnectLandlord: dto.canConnectLandlord ?? false,
+        hasLandlordContact: dto.hasLandlordContact ?? false,
+        profilePhotoUrl: dto.profilePhotoUrl?.trim() || null,
+        gender: this.mapGender(dto.gender),
+        occupation: dto.occupation?.trim() || null,
         emailVerificationTokenHash: tokenArtifacts.tokenHash,
         emailVerificationExpiresAt: tokenArtifacts.expiresAt,
       },
@@ -149,6 +170,169 @@ export class AuthService {
     });
 
     return this.registerResponse(tokenArtifacts.rawToken);
+  }
+
+  private async registerOrLoginWithOauth(dto: RegisterDto, ip: string) {
+    if (!dto.oauthProvider || !dto.oauthIdToken) {
+      throw new BadRequestException(
+        'oauthProvider and oauthIdToken are required for oauth registration',
+      );
+    }
+
+    const provider = this.mapOauthProvider(dto.oauthProvider);
+    const identity = await this.oauthService.verifyIdentityToken(
+      dto.oauthProvider,
+      dto.oauthIdToken,
+    );
+
+    const normalizedPhone = dto.phone ? this.normalizePhone(dto.phone) : null;
+    const fullName = this.resolveDisplayName(dto.fullName, identity.fullName);
+
+    const existingProviderUser = await this.prisma.user.findFirst({
+      where: {
+        oauthProvider: provider,
+        oauthProviderUserId: identity.providerUserId,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (existingProviderUser) {
+      this.audit('oauth_login_existing_provider', {
+        ip,
+        userId: existingProviderUser.id,
+        provider,
+      });
+
+      return this.buildOauthAuthResponse(
+        existingProviderUser.id,
+        'OAuth login successful',
+      );
+    }
+
+    const existingEmailUser = await this.prisma.user.findUnique({
+      where: { email: identity.email },
+      select: {
+        id: true,
+        phone: true,
+        oauthProvider: true,
+      },
+    });
+
+    if (existingEmailUser) {
+      if (
+        existingEmailUser.oauthProvider &&
+        existingEmailUser.oauthProvider !== provider
+      ) {
+        throw new ConflictException(
+          'This email is already linked to another provider',
+        );
+      }
+
+      if (normalizedPhone && normalizedPhone !== existingEmailUser.phone) {
+        const phoneOwner = await this.prisma.user.findUnique({
+          where: { phone: normalizedPhone },
+          select: { id: true },
+        });
+
+        if (phoneOwner && phoneOwner.id !== existingEmailUser.id) {
+          throw new ConflictException('Phone is already used');
+        }
+      }
+
+      await this.prisma.user.update({
+        where: { id: existingEmailUser.id },
+        data: {
+          oauthProvider: provider,
+          oauthProviderUserId: identity.providerUserId,
+          emailVerifiedAt: identity.emailVerified ? new Date() : undefined,
+          fullName,
+          ...(normalizedPhone ? { phone: normalizedPhone } : {}),
+          ...(dto.profilePhotoUrl?.trim()
+            ? { profilePhotoUrl: dto.profilePhotoUrl.trim() }
+            : identity.profilePhotoUrl
+              ? { profilePhotoUrl: identity.profilePhotoUrl }
+              : {}),
+          ...(dto.gender ? { gender: this.mapGender(dto.gender) } : {}),
+          ...(dto.occupation?.trim()
+            ? { occupation: dto.occupation.trim() }
+            : {}),
+          ...(dto.allowIncomingCalls !== undefined
+            ? { allowIncomingCalls: dto.allowIncomingCalls }
+            : {}),
+          ...(dto.canConnectLandlord !== undefined
+            ? { canConnectLandlord: dto.canConnectLandlord }
+            : {}),
+          ...(dto.hasLandlordContact !== undefined
+            ? { hasLandlordContact: dto.hasLandlordContact }
+            : {}),
+        },
+      });
+
+      this.audit('oauth_login_linked_existing_email', {
+        ip,
+        userId: existingEmailUser.id,
+        provider,
+      });
+
+      return this.buildOauthAuthResponse(
+        existingEmailUser.id,
+        'OAuth login successful',
+      );
+    }
+
+    if (!normalizedPhone) {
+      throw new BadRequestException(
+        'phone is required when creating a new account with oauth',
+      );
+    }
+
+    const existingPhoneUser = await this.prisma.user.findUnique({
+      where: { phone: normalizedPhone },
+      select: { id: true },
+    });
+
+    if (existingPhoneUser) {
+      throw new ConflictException('Phone is already used');
+    }
+
+    const generatedPassword = randomBytes(32).toString('hex');
+    const passwordHash = await hash(generatedPassword, 10);
+
+    const user = await this.prisma.user.create({
+      data: {
+        fullName,
+        email: identity.email,
+        phone: normalizedPhone,
+        password: passwordHash,
+        emailVerifiedAt: identity.emailVerified ? new Date() : null,
+        oauthProvider: provider,
+        oauthProviderUserId: identity.providerUserId,
+        allowIncomingCalls: dto.allowIncomingCalls ?? false,
+        canConnectLandlord: dto.canConnectLandlord ?? false,
+        hasLandlordContact: dto.hasLandlordContact ?? false,
+        profilePhotoUrl:
+          dto.profilePhotoUrl?.trim() || identity.profilePhotoUrl || null,
+        gender: this.mapGender(dto.gender),
+        occupation: dto.occupation?.trim() || null,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    this.audit('oauth_register_success', {
+      ip,
+      userId: user.id,
+      email: identity.email,
+      provider,
+    });
+
+    return this.buildOauthAuthResponse(
+      user.id,
+      'OAuth registration successful',
+    );
   }
 
   async login(dto: LoginDto, ip: string) {
@@ -185,6 +369,11 @@ export class AuthService {
         noShowCount: true,
         cooldownUntil: true,
         blockedUntil: true,
+        profilePhotoUrl: true,
+        gender: true,
+        occupation: true,
+        allowIncomingCalls: true,
+        oauthProvider: true,
         canConnectLandlord: true,
         hasLandlordContact: true,
         onboardingComplete: true,
@@ -268,6 +457,11 @@ export class AuthService {
         noShowCount: user.noShowCount,
         cooldownUntil: user.cooldownUntil,
         blockedUntil: user.blockedUntil,
+        profilePhotoUrl: user.profilePhotoUrl,
+        gender: user.gender,
+        occupation: user.occupation,
+        allowIncomingCalls: user.allowIncomingCalls,
+        oauthProvider: user.oauthProvider,
         canConnectLandlord: user.canConnectLandlord,
         hasLandlordContact: user.hasLandlordContact,
         onboardingComplete: user.onboardingComplete,
@@ -296,6 +490,11 @@ export class AuthService {
         noShowCount: true,
         cooldownUntil: true,
         blockedUntil: true,
+        profilePhotoUrl: true,
+        gender: true,
+        occupation: true,
+        allowIncomingCalls: true,
+        oauthProvider: true,
         canConnectLandlord: true,
         hasLandlordContact: true,
         onboardingComplete: true,
@@ -584,6 +783,80 @@ export class AuthService {
         ? { verificationToken }
         : {}),
     };
+  }
+
+  private async buildOauthAuthResponse(userId: string, message: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        fullName: true,
+        phone: true,
+        email: true,
+        subscriptionStatus: true,
+        subscriptionExpiresAt: true,
+        reliabilityScore: true,
+        cancellationCount: true,
+        noShowCount: true,
+        cooldownUntil: true,
+        blockedUntil: true,
+        profilePhotoUrl: true,
+        gender: true,
+        occupation: true,
+        allowIncomingCalls: true,
+        oauthProvider: true,
+        canConnectLandlord: true,
+        hasLandlordContact: true,
+        onboardingComplete: true,
+        phoneVerifiedAt: true,
+      },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    const token = this.jwtService.sign({ userId: user.id });
+
+    return {
+      message,
+      accessToken: token,
+      user,
+    };
+  }
+
+  private mapOauthProvider(provider: OAuthProviderType): 'GOOGLE' | 'APPLE' {
+    return provider === 'google' ? 'GOOGLE' : 'APPLE';
+  }
+
+  private mapGender(
+    gender?: 'male' | 'female' | 'other' | 'prefer_not_to_say',
+  ): 'MALE' | 'FEMALE' | 'OTHER' | 'PREFER_NOT_TO_SAY' | null {
+    if (!gender) {
+      return null;
+    }
+
+    if (gender === 'male') return 'MALE';
+    if (gender === 'female') return 'FEMALE';
+    if (gender === 'other') return 'OTHER';
+    return 'PREFER_NOT_TO_SAY';
+  }
+
+  private resolveDisplayName(
+    providedName: string | undefined,
+    fallbackName: string | undefined,
+  ): string {
+    const normalizedProvided = providedName?.trim();
+    if (normalizedProvided) {
+      return normalizedProvided;
+    }
+
+    const normalizedFallback = fallbackName?.trim();
+    if (normalizedFallback) {
+      return normalizedFallback;
+    }
+
+    return 'TenantSwap User';
   }
 
   private shouldExposeVerificationToken(): boolean {

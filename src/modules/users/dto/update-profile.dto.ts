@@ -2,8 +2,10 @@ import { Transform } from 'class-transformer';
 import {
   IsBoolean,
   IsEmail,
+  IsIn,
   IsOptional,
   IsString,
+  IsUrl,
   Matches,
   MaxLength,
   MinLength,
@@ -68,12 +70,40 @@ export class UpdateProfileDto {
   @Transform(({ value }: { value: unknown }) => toBoolean(value))
   @IsOptional()
   @IsBoolean()
+  allowIncomingCalls?: boolean;
+
+  @Transform(({ value }: { value: unknown }) => toBoolean(value))
+  @IsOptional()
+  @IsBoolean()
   canConnectLandlord?: boolean;
 
   @Transform(({ value }: { value: unknown }) => toBoolean(value))
   @IsOptional()
   @IsBoolean()
   hasLandlordContact?: boolean;
+
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  @IsOptional()
+  @IsUrl({ require_tld: false })
+  @MaxLength(2048)
+  profilePhotoUrl?: string;
+
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim().toLowerCase() : value,
+  )
+  @IsOptional()
+  @IsIn(['male', 'female', 'other', 'prefer_not_to_say'])
+  gender?: 'male' | 'female' | 'other' | 'prefer_not_to_say';
+
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  occupation?: string;
 
   @IsOptional()
   @IsString()

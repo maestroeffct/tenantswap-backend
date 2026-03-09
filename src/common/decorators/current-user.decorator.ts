@@ -3,7 +3,7 @@ import {
   ExecutionContext,
   UnauthorizedException,
 } from '@nestjs/common';
-import type { SubscriptionStatus } from '@prisma/client';
+import type { AuthProvider, Gender, SubscriptionStatus } from '@prisma/client';
 import type { Request } from 'express';
 
 export type CurrentUserPayload = {
@@ -19,6 +19,11 @@ export type CurrentUserPayload = {
   noShowCount: number;
   cooldownUntil: Date | null;
   blockedUntil: Date | null;
+  profilePhotoUrl: string | null;
+  gender: Gender | null;
+  occupation: string | null;
+  allowIncomingCalls: boolean;
+  oauthProvider: AuthProvider | null;
   canConnectLandlord: boolean;
   hasLandlordContact: boolean;
   onboardingComplete: boolean;

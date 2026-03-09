@@ -11,6 +11,7 @@ Required/runtime variables currently used by the backend:
 - `JWT_SECRET`
 - `JWT_EXPIRES_IN`
 - `FRONTEND_VERIFY_EMAIL_URL`
+- `GOOGLE_OAUTH_CLIENT_ID`
 - `PORT`
 - `THROTTLE_GLOBAL_TTL_MS`
 - `THROTTLE_GLOBAL_LIMIT`
@@ -198,21 +199,36 @@ Creating the first listing (`POST /listings`) marks `onboardingComplete=true`. 6
 
 ### POST `/auth/register`
 
-Required request body:
+Password auth request body:
 
 ```json
 {
+  "authType": "password",
   "fullName": "Ada Lovelace",
   "email": "ada@example.com",
   "phone": "+2348012345678",
   "password": "Password123!",
-  "canConnectLandlord": true,
-  "hasLandlordContact": true
+  "allowIncomingCalls": true,
+  "hasLandlordContact": true,
+  "canConnectLandlord": true
 }
 ```
 
-`canConnectLandlord` and `hasLandlordContact` are required onboarding fields at registration.
-`onboardingComplete` is backend-controlled and remains `false` after registration until swap engine setup is completed.
+OAuth request body (same endpoint):
+
+```json
+{
+  "authType": "oauth",
+  "oauthProvider": "google",
+  "oauthIdToken": "<google-id-token>",
+  "phone": "+2348012345678",
+  "allowIncomingCalls": true,
+  "hasLandlordContact": true,
+  "canConnectLandlord": true
+}
+```
+
+`onboardingComplete` is backend-controlled and remains `false` until required profile/setup steps are completed.
 
 ### POST `/auth/phone/send-otp`
 

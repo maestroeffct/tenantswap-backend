@@ -28,6 +28,12 @@ model User {
   noShowCount                 Int                @default(0)
   cooldownUntil               DateTime?
   blockedUntil                DateTime?
+  oauthProvider               AuthProvider?
+  oauthProviderUserId         String?
+  profilePhotoUrl             String?
+  gender                      Gender?
+  occupation                  String?
+  allowIncomingCalls          Boolean            @default(false)
   canConnectLandlord          Boolean            @default(false)
   hasLandlordContact          Boolean            @default(false)
   onboardingComplete          Boolean            @default(false)
@@ -44,6 +50,7 @@ model User {
   paymentTransactions PaymentTransaction[]
   reliabilityEvents   ReliabilityEvent[]
 
+  @@unique([oauthProvider, oauthProviderUserId])
   @@index([emailVerificationTokenHash])
   @@index([subscriptionStatus, subscriptionExpiresAt])
   @@index([blockedUntil, cooldownUntil])
@@ -95,6 +102,18 @@ model SwapListing {
 enum UserRole {
   USER
   ADMIN
+}
+
+enum AuthProvider {
+  GOOGLE
+  APPLE
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+  PREFER_NOT_TO_SAY
 }
 
 enum ListingStatus {
