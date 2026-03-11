@@ -1,4 +1,4 @@
-import { Body, Controller, Ip, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Ip, Post, Req, UseGuards } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -10,10 +10,23 @@ import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { VerifyPhoneOtpDto } from './dto/verify-phone-otp.dto';
 import { AuthService } from './auth.service';
+import { GoogleOAuthGuard } from 'src/common/guards/google-oauth.guard';
 
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
+
+  @UseGuards(GoogleOAuthGuard)
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Get('sso/google')
+  googleAuth() {}
+
+   @UseGuards(GoogleOAuthGuard)
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Get('sso/google/callback')
+  googleAuthCallback(@Req() req){
+    return req.user
+  }
 
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Post('register')

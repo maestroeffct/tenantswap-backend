@@ -85,6 +85,13 @@ export class AuthService {
       this.config.get<number>('PHONE_OTP_RESEND_COOLDOWN_SECONDS') ?? 60;
   }
 
+
+  async sso(dto: any) {
+      return {
+        dto
+      };
+  }
+
   async register(dto: RegisterDto, ip: string) {
     const authType = dto.authType === 'oauth' ? 'oauth' : 'password';
 

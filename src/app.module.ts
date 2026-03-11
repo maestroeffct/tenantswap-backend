@@ -16,6 +16,7 @@ import { MatchingModule } from './modules/matching/matching.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { BillingModule } from './modules/billing/billing.module';
 import { validateEnv } from './config/env.validation';
+import { GoogleStrategy } from './common/strategies/google.strategy';
 
 @Module({
   controllers: [AppController],
@@ -55,6 +56,7 @@ import { validateEnv } from './config/env.validation';
     AppService,
     PrismaService,
     JwtStrategy,
+    GoogleStrategy
   ],
 })
 export class AppModule {}

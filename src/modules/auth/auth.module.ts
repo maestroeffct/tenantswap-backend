@@ -1,13 +1,15 @@
-import { Module } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { JwtModule } from '@nestjs/jwt';
+import { Module } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import { JwtModule } from "@nestjs/jwt";
 
-import { PrismaService } from '../../common/prisma.service';
-import { EmailService } from '../../common/services/email.service';
-import { OauthService } from '../../common/services/oauth.service';
-import { TermiiService } from '../../common/services/termii.service';
-import { AuthController } from './auth.controller';
-import { AuthService } from './auth.service';
+import { PrismaService } from "../../common/prisma.service";
+import { EmailService } from "../../common/services/email.service";
+import { OauthService } from "../../common/services/oauth.service";
+import { TermiiService } from "../../common/services/termii.service";
+import { AuthController } from "./auth.controller";
+import { AuthService } from "./auth.service";
+import { JwtService } from "@nestjs/jwt";
+import { GoogleStrategy } from "src/common/strategies/google.strategy";
 
 function parseJwtExpiresInToSeconds(value: string): number {
   const match = /^(\d+)([smhd])$/.exec(value);
@@ -18,9 +20,9 @@ function parseJwtExpiresInToSeconds(value: string): number {
   const amount = Number.parseInt(match[1], 10);
   const unit = match[2];
 
-  if (unit === 's') return amount;
-  if (unit === 'm') return amount * 60;
-  if (unit === 'h') return amount * 60 * 60;
+  if (unit === "s") return amount;
+  if (unit === "m") return amount * 60;
+  if (unit === "h") return amount * 60 * 60;
   return amount * 60 * 60 * 24;
 }
 
@@ -29,12 +31,12 @@ function parseJwtExpiresInToSeconds(value: string): number {
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
-        const secret = config.get<string>('JWT_SECRET');
+        const secret = config.get<string>("JWT_SECRET");
         if (!secret) {
-          throw new Error('JWT_SECRET is not configured');
+          throw new Error("JWT_SECRET is not configured");
         }
 
-        const expiresInRaw = config.get<string>('JWT_EXPIRES_IN') ?? '15m';
+        const expiresInRaw = config.get<string>("JWT_EXPIRES_IN") ?? "15m";
 
         return {
           secret,
@@ -45,6 +47,7 @@ function parseJwtExpiresInToSeconds(value: string): number {
       },
     }),
   ],
+  exports: [AuthService],
   controllers: [AuthController],
   providers: [
     AuthService,
@@ -52,6 +55,8 @@ function parseJwtExpiresInToSeconds(value: string): number {
     EmailService,
     TermiiService,
     OauthService,
+    JwtService,
+    GoogleStrategy,
   ],
 })
 export class AuthModule {}
