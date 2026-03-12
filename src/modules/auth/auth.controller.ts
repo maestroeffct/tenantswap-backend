@@ -24,8 +24,8 @@ export class AuthController {
    @UseGuards(GoogleOAuthGuard)
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Get('sso/google/callback')
-  googleAuthCallback(@Req() req){
-    return req.user
+  googleAuthCallback(@Req() req: any){
+    return this.authService.sso(req);
   }
 
   @Throttle({ default: { limit: 5, ttl: 60_000 } })

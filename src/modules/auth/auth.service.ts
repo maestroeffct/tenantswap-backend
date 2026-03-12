@@ -86,10 +86,9 @@ export class AuthService {
   }
 
 
-  async sso(dto: any) {
-      return {
-        dto
-      };
+  async sso(req: any) {
+    const user = req.user;
+  return user
   }
 
   async register(dto: RegisterDto, ip: string) {

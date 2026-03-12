@@ -32,7 +32,15 @@ export class GoogleStrategy extends PassportStrategy(Strategy, "google") {
 
     console.log(profile);
 
-    done(null, profile);
+      const user =  {
+        id: profile.id,
+      name: profile.displayName,
+      email: profile.emails[0].value,
+      avatar: profile.photos[0].value,
+    };
+    console.log("user", user);
+
+    done(null, user);
 
 
   }

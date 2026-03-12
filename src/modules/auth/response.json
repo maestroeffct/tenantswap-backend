@@ -1,0 +1,35 @@
+{
+  id: '110295788193668684783',
+  displayName: 'Jacobs Joshua Oyakhire',
+  name: { familyName: 'Joshua Oyakhire', givenName: 'Jacobs' },
+  emails: [ { value: 'jacobsjoshua81@gmail.com', verified: true } ],
+  photos: [
+    {
+      value: 'https://lh3.googleusercontent.com/a/ACg8ocJzAQm3j6Abl1n2Oxbucc48QzTadDGRlOIsu0fxr3Lb6t-VV1rG=s96-c'
+    }
+  ],
+  provider: 'google',
+  _raw: '{\n' +
+    '  "sub": "110295788193668684783",\n' +
+    '  "name": "Jacobs Joshua Oyakhire",\n' +
+    '  "given_name": "Jacobs",\n' +
+    '  "family_name": "Joshua Oyakhire",\n' +
+    '  "picture": "https://lh3.googleusercontent.com/a/ACg8ocJzAQm3j6Abl1n2Oxbucc48QzTadDGRlOIsu0fxr3Lb6t-VV1rG\\u003ds96-c",\n' +
+    '  "email": "jacobsjoshua81@gmail.com",\n' +
+    '  "email_verified": true\n' +
+    '}',
+  _json: {
+    sub: '110295788193668684783',
+    name: 'Jacobs Joshua Oyakhire',
+    given_name: 'Jacobs',
+    family_name: 'Joshua Oyakhire',
+    picture: 'https://lh3.googleusercontent.com/a/ACg8ocJzAQm3j6Abl1n2Oxbucc48QzTadDGRlOIsu0fxr3Lb6t-VV1rG=s96-c',
+    email: 'jacobsjoshua81@gmail.com',
+    email_verified: true
+  }
+}
+{
+  name: 'Jacobs Joshua Oyakhire',
+  email: 'jacobsjoshua81@gmail.com',
+  avatar: 'https://lh3.googleusercontent.com/a/ACg8ocJzAQm3j6Abl1n2Oxbucc48QzTadDGRlOIsu0fxr3Lb6t-VV1rG=s96-c'
+}
