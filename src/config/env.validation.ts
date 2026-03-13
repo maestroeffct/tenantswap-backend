@@ -141,6 +141,7 @@ const envSchema = z
     GOOGLE_OAUTH_CLIENT_ID: optionalString(),
     GOOGLE_OAUTH_CLIENT_SECRET: optionalString(),
     GOOGLE_OAUTH_CALLBACK_URL: optionalString(),
+    GOOGLE_OAUTH_FRONTEND_CALLBACK_URL: optionalString(),
 
     PORT: positiveIntWithDefault('PORT', 3000),
     THROTTLE_GLOBAL_TTL_MS: positiveIntWithDefault(

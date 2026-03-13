@@ -33,6 +33,7 @@ model User {
   profilePhotoUrl             String?
   gender                      Gender?
   occupation                  String?
+  relationship_status      String?
   allowIncomingCalls          Boolean            @default(false)
   canConnectLandlord          Boolean            @default(false)
   hasLandlordContact          Boolean            @default(false)

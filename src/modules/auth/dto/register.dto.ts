@@ -99,6 +99,14 @@ export class RegisterDto {
   @MinLength(20)
   oauthIdToken?: string;
 
+    @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  @IsOptional()
+  @IsString()
+  @MinLength(20)
+  oauthId?: string;
+
   @Transform(({ value }: { value: unknown }) => toBoolean(value))
   @IsOptional()
   @IsBoolean()
@@ -136,4 +144,10 @@ export class RegisterDto {
   @IsString()
   @MaxLength(100)
   occupation?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  relationship_status?: string;
+
 }

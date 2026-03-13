@@ -8,8 +8,9 @@ import { OauthService } from "../../common/services/oauth.service";
 import { TermiiService } from "../../common/services/termii.service";
 import { AuthController } from "./auth.controller";
 import { AuthService } from "./auth.service";
-import { JwtService } from "@nestjs/jwt";
 import { GoogleStrategy } from "src/common/strategies/google.strategy";
+import { PassportModule } from "@nestjs/passport";
+import { JwtStrategy } from "src/common/guards/jwt.strategy";
 
 function parseJwtExpiresInToSeconds(value: string): number {
   const match = /^(\d+)([smhd])$/.exec(value);
@@ -28,6 +29,7 @@ function parseJwtExpiresInToSeconds(value: string): number {
 
 @Module({
   imports: [
+    PassportModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
@@ -55,8 +57,8 @@ function parseJwtExpiresInToSeconds(value: string): number {
     EmailService,
     TermiiService,
     OauthService,
-    JwtService,
     GoogleStrategy,
+    JwtStrategy
   ],
 })
 export class AuthModule {}

@@ -6,6 +6,7 @@ import {
   Injectable,
   Logger,
   UnauthorizedException,
+
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
@@ -23,6 +24,8 @@ import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
+import { OauthUser } from 'src/common/@types';
+
 
 type AttemptState = {
   count: number;
@@ -86,9 +89,36 @@ export class AuthService {
   }
 
 
-  async sso(req: any) {
-    const user = req.user;
-  return user
+  async sso(req: any, res: any) {
+    const user: OauthUser = req.user;
+
+    const existingProviderUser = await this.prisma.user.findFirst({
+      where: {
+        email: user.email,
+        fullName: user.name,
+        oauthProvider: "GOOGLE",
+        oauthProviderUserId: user.id,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (existingProviderUser) {
+
+      const response = await this.buildOauthAuthResponse(
+        existingProviderUser.id,
+        'OAuth Login successful',
+      );
+
+      return res.redirect(`${this.config.get<string>('GOOGLE_OAUTH_FRONTEND_CALLBACK_URL')}?token=${response.accessToken}&state=signin`);
+    }
+
+
+
+    this.logger.log( 'OAuth successful')
+
+    return res.redirect(`${this.config.get<string>('GOOGLE_OAUTH_FRONTEND_CALLBACK_URL')}?state=signup&token=${user.accessToken}&id=${user.id}&email=${user.email}&fullName=${user.name}&avatar=${user.avatar}`);
   }
 
   async register(dto: RegisterDto, ip: string) {
@@ -186,39 +216,16 @@ export class AuthService {
     }
 
     const provider = this.mapOauthProvider(dto.oauthProvider);
-    const identity = await this.oauthService.verifyIdentityToken(
-      dto.oauthProvider,
-      dto.oauthIdToken,
-    );
 
     const normalizedPhone = dto.phone ? this.normalizePhone(dto.phone) : null;
-    const fullName = this.resolveDisplayName(dto.fullName, identity.fullName);
-
-    const existingProviderUser = await this.prisma.user.findFirst({
-      where: {
-        oauthProvider: provider,
-        oauthProviderUserId: identity.providerUserId,
-      },
-      select: {
-        id: true,
-      },
-    });
-
-    if (existingProviderUser) {
-      this.audit('oauth_login_existing_provider', {
-        ip,
-        userId: existingProviderUser.id,
-        provider,
-      });
-
-      return this.buildOauthAuthResponse(
-        existingProviderUser.id,
-        'OAuth login successful',
+     if (!normalizedPhone) {
+      throw new BadRequestException(
+        'phone is required when creating a new account with oauth',
       );
     }
 
     const existingEmailUser = await this.prisma.user.findUnique({
-      where: { email: identity.email },
+      where: { email: dto.email },
       select: {
         id: true,
         phone: true,
@@ -226,101 +233,35 @@ export class AuthService {
       },
     });
 
-    if (existingEmailUser) {
-      if (
-        existingEmailUser.oauthProvider &&
-        existingEmailUser.oauthProvider !== provider
-      ) {
-        throw new ConflictException(
-          'This email is already linked to another provider',
-        );
-      }
-
-      if (normalizedPhone && normalizedPhone !== existingEmailUser.phone) {
-        const phoneOwner = await this.prisma.user.findUnique({
-          where: { phone: normalizedPhone },
-          select: { id: true },
-        });
-
-        if (phoneOwner && phoneOwner.id !== existingEmailUser.id) {
-          throw new ConflictException('Phone is already used');
-        }
-      }
-
-      await this.prisma.user.update({
-        where: { id: existingEmailUser.id },
-        data: {
-          oauthProvider: provider,
-          oauthProviderUserId: identity.providerUserId,
-          emailVerifiedAt: identity.emailVerified ? new Date() : undefined,
-          fullName,
-          ...(normalizedPhone ? { phone: normalizedPhone } : {}),
-          ...(dto.profilePhotoUrl?.trim()
-            ? { profilePhotoUrl: dto.profilePhotoUrl.trim() }
-            : identity.profilePhotoUrl
-              ? { profilePhotoUrl: identity.profilePhotoUrl }
-              : {}),
-          ...(dto.gender ? { gender: this.mapGender(dto.gender) } : {}),
-          ...(dto.occupation?.trim()
-            ? { occupation: dto.occupation.trim() }
-            : {}),
-          ...(dto.allowIncomingCalls !== undefined
-            ? { allowIncomingCalls: dto.allowIncomingCalls }
-            : {}),
-          ...(dto.canConnectLandlord !== undefined
-            ? { canConnectLandlord: dto.canConnectLandlord }
-            : {}),
-          ...(dto.hasLandlordContact !== undefined
-            ? { hasLandlordContact: dto.hasLandlordContact }
-            : {}),
-        },
-      });
-
-      this.audit('oauth_login_linked_existing_email', {
-        ip,
-        userId: existingEmailUser.id,
-        provider,
-      });
-
-      return this.buildOauthAuthResponse(
-        existingEmailUser.id,
-        'OAuth login successful',
+    if (existingEmailUser && existingEmailUser.oauthProvider) {
+      throw new ConflictException(
+        'This email is already linked to another account or provider',
       );
     }
 
-    if (!normalizedPhone) {
-      throw new BadRequestException(
-        'phone is required when creating a new account with oauth',
-      );
-    }
 
-    const existingPhoneUser = await this.prisma.user.findUnique({
-      where: { phone: normalizedPhone },
-      select: { id: true },
-    });
-
-    if (existingPhoneUser) {
-      throw new ConflictException('Phone is already used');
-    }
+    const fullName = this.resolveDisplayName(dto.fullName, "");
 
     const generatedPassword = randomBytes(32).toString('hex');
     const passwordHash = await hash(generatedPassword, 10);
+    const tokenArtifacts = this.generateEmailVerificationArtifacts();
 
     const user = await this.prisma.user.create({
       data: {
         fullName,
-        email: identity.email,
+        email: dto.email,
         phone: normalizedPhone,
         password: passwordHash,
-        emailVerifiedAt: identity.emailVerified ? new Date() : null,
+        emailVerifiedAt:new Date(),
         oauthProvider: provider,
-        oauthProviderUserId: identity.providerUserId,
+        oauthProviderUserId: dto.oauthId,
         allowIncomingCalls: dto.allowIncomingCalls ?? false,
         canConnectLandlord: dto.canConnectLandlord ?? false,
         hasLandlordContact: dto.hasLandlordContact ?? false,
-        profilePhotoUrl:
-          dto.profilePhotoUrl?.trim() || identity.profilePhotoUrl || null,
+        profilePhotoUrl: dto.profilePhotoUrl?.trim()  || null,
         gender: this.mapGender(dto.gender),
+        emailVerificationTokenHash: tokenArtifacts.tokenHash,
+        emailVerificationExpiresAt: tokenArtifacts.expiresAt,
         occupation: dto.occupation?.trim() || null,
       },
       select: {
@@ -331,7 +272,7 @@ export class AuthService {
     this.audit('oauth_register_success', {
       ip,
       userId: user.id,
-      email: identity.email,
+      email: dto.email,
       provider,
     });
 
@@ -792,7 +733,8 @@ export class AuthService {
   }
 
   private async buildOauthAuthResponse(userId: string, message: string) {
-    const user = await this.prisma.user.findUnique({
+ try {
+     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: {
         id: true,
@@ -822,13 +764,18 @@ export class AuthService {
       throw new UnauthorizedException('User not found');
     }
 
-    const token = this.jwtService.sign({ userId: user.id });
+    const token = this.jwtService.sign({ userId: userId });
 
     return {
       message,
       accessToken: token,
       user,
     };
+ } catch (error) {
+  console.log(error);
+      throw new UnauthorizedException('JWT Error');
+
+ }
   }
 
   private mapOauthProvider(provider: OAuthProviderType): 'GOOGLE' | 'APPLE' {
@@ -1065,4 +1012,6 @@ export class AuthService {
   private audit(event: string, metadata: Record<string, unknown>): void {
     this.logger.warn(`[AUTH_AUDIT] ${event} ${JSON.stringify(metadata)}`);
   }
+
+
 }

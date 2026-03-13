@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Ip, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Ip, Post, Req,Res, UseGuards } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -24,8 +24,8 @@ export class AuthController {
    @UseGuards(GoogleOAuthGuard)
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Get('sso/google/callback')
-  googleAuthCallback(@Req() req: any){
-    return this.authService.sso(req);
+  googleAuthCallback(@Req() req: any, @Res() res: any){
+    return this.authService.sso(req, res);
   }
 
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
