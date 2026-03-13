@@ -114,8 +114,6 @@ export class AuthService {
       return res.redirect(`${this.config.get<string>('GOOGLE_OAUTH_FRONTEND_CALLBACK_URL')}?token=${response.accessToken}&state=signin`);
     }
 
-
-
     this.logger.log( 'OAuth successful')
 
     return res.redirect(`${this.config.get<string>('GOOGLE_OAUTH_FRONTEND_CALLBACK_URL')}?state=signup&token=${user.accessToken}&id=${user.id}&email=${user.email}&fullName=${user.name}&avatar=${user.avatar}`);

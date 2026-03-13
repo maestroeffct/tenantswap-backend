@@ -32,7 +32,7 @@ export class GoogleStrategy extends PassportStrategy(Strategy, "google") {
     done: VerifyCallback,
   ): Promise<any> {
 
-    console.log(profile);
+    // console.log(profile);
 
     const user: OauthUser = {
       id: profile.id,
@@ -41,7 +41,7 @@ export class GoogleStrategy extends PassportStrategy(Strategy, "google") {
       avatar: profile.photos[0].value,
       accessToken: accessToken,
     };
-    console.log("user", user);
+    // console.log("user", user);
 
     done(null, user);
 
