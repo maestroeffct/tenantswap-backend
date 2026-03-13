@@ -3,7 +3,7 @@ import {
   ExecutionContext,
   UnauthorizedException,
 } from '@nestjs/common';
-import type { AuthProvider, Gender, SubscriptionStatus } from '@prisma/client';
+import type { AuthProvider, Gender, SubscriptionStatus, SwapListing } from '@prisma/client';
 import type { Request } from 'express';
 
 export type CurrentUserPayload = {
@@ -28,6 +28,7 @@ export type CurrentUserPayload = {
   hasLandlordContact: boolean;
   onboardingComplete: boolean;
   phoneVerifiedAt: Date | null;
+  listings:  SwapListing[] | null
 };
 
 export const CurrentUser = createParamDecorator(

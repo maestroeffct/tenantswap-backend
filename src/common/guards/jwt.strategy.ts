@@ -42,6 +42,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         hasLandlordContact: true,
         onboardingComplete: true,
         phoneVerifiedAt: true,
+        listings: true,
       },
     });
   }
