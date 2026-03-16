@@ -142,7 +142,8 @@ describe('MatchingService', () => {
       currentCity: 'Abuja',
       currentType: '1 Bedroom',
       currentRent: 700,
-      availableOn: new Date('2099-03-01T00:00:00.000Z'),
+      currentAvailable: true,
+      currentAvailableOn: new Date('2099-03-01T00:00:00.000Z'),
       features: ['parking', 'security'],
       expiresAt: new Date('2099-03-08T00:00:00.000Z'),
     };
@@ -158,7 +159,8 @@ describe('MatchingService', () => {
       currentCity: 'Lagos',
       currentType: '2 Bedroom',
       currentRent: 900,
-      availableOn: new Date('2099-03-08T00:00:00.000Z'),
+      currentAvailable: true,
+      currentAvailableOn: new Date('2099-03-08T00:00:00.000Z'),
       features: ['security', 'balcony'],
       expiresAt: new Date('2099-03-15T00:00:00.000Z'),
     };
@@ -226,7 +228,8 @@ describe('MatchingService', () => {
       currentCity: 'Abuja',
       currentType: '1 Bedroom',
       currentRent: 650,
-      availableOn: new Date('2099-03-01T00:00:00.000Z'),
+      currentAvailable: true,
+      currentAvailableOn: new Date('2099-03-01T00:00:00.000Z'),
       features: ['parking', 'security'],
       expiresAt: new Date('2099-03-08T00:00:00.000Z'),
     };
@@ -242,7 +245,8 @@ describe('MatchingService', () => {
       currentCity: 'Lagos',
       currentType: '2 Bedroom',
       currentRent: 1100,
-      availableOn: new Date('2099-03-12T00:00:00.000Z'),
+      currentAvailable: true,
+      currentAvailableOn: new Date('2099-03-12T00:00:00.000Z'),
       features: ['security'],
       expiresAt: new Date('2099-03-20T00:00:00.000Z'),
     };
@@ -258,7 +262,8 @@ describe('MatchingService', () => {
       currentCity: 'Ikeja',
       currentType: '2 Bedroom',
       currentRent: 1300,
-      availableOn: new Date('2099-03-20T00:00:00.000Z'),
+      currentAvailable: true,
+      currentAvailableOn: new Date('2099-03-20T00:00:00.000Z'),
       features: ['parking'],
       expiresAt: new Date('2099-03-30T00:00:00.000Z'),
     };
@@ -300,7 +305,8 @@ describe('MatchingService', () => {
       currentCity: 'Abuja',
       currentType: 'Studio',
       currentRent: 700,
-      availableOn: new Date('2099-03-01T00:00:00.000Z'),
+      currentAvailable: true,
+      currentAvailableOn: new Date('2099-03-01T00:00:00.000Z'),
       features: ['parking'],
       expiresAt: new Date('2099-03-08T00:00:00.000Z'),
     };
@@ -332,7 +338,8 @@ describe('MatchingService', () => {
       currentCity: 'Lagos',
       currentType: '2 Bedroom',
       currentRent: 1000,
-      availableOn: new Date('2099-03-14T00:00:00.000Z'),
+      currentAvailable: true,
+      currentAvailableOn: new Date('2099-03-14T00:00:00.000Z'),
       features: ['security'],
       expiresAt: new Date('2099-03-14T00:00:00.000Z'),
       user: {
@@ -353,7 +360,8 @@ describe('MatchingService', () => {
       currentCity: 'Abuja',
       currentType: '1 Bedroom',
       currentRent: 700,
-      availableOn: new Date('2099-03-01T00:00:00.000Z'),
+      currentAvailable: true,
+      currentAvailableOn: new Date('2099-03-01T00:00:00.000Z'),
       features: ['parking'],
       expiresAt: new Date('2099-03-08T00:00:00.000Z'),
       user: {
@@ -403,7 +411,8 @@ describe('MatchingService', () => {
       currentCity: 'Abuja',
       currentType: '1 Bedroom',
       currentRent: 650,
-      availableOn: new Date('2099-03-01T00:00:00.000Z'),
+      currentAvailable: true,
+      currentAvailableOn: new Date('2099-03-01T00:00:00.000Z'),
       features: ['parking'],
       expiresAt: new Date('2099-03-20T00:00:00.000Z'),
     };
@@ -419,7 +428,8 @@ describe('MatchingService', () => {
       currentCity: 'Lagos',
       currentType: '2 Bedroom',
       currentRent: 1100,
-      availableOn: new Date('2099-03-05T00:00:00.000Z'),
+      currentAvailable: true,
+      currentAvailableOn: new Date('2099-03-05T00:00:00.000Z'),
       features: ['parking', 'security'],
       expiresAt: new Date('2099-03-25T00:00:00.000Z'),
     };

@@ -1,4 +1,4 @@
-import { IsString, IsInt, IsDateString, IsArray } from 'class-validator';
+import { IsString, IsInt, IsDateString, IsArray, IsBoolean } from 'class-validator';
 
 export class CreateListingDto {
   // LOOKING FOR
@@ -24,8 +24,11 @@ export class CreateListingDto {
   @IsInt()
   currentRent: number;
 
+  @IsBoolean()
+  currentAvailable: boolean;
+
   @IsDateString()
-  availableOn: string;
+  currentAvailableOn: string;
 
   @IsArray()
   features: string[];

@@ -69,10 +69,12 @@ model SwapListing {
   timeline    String
 
   // WHAT USER IS LEAVING
-  currentType String
-  currentCity String
-  currentRent Int
-  availableOn DateTime
+  currentType        String
+  currentCity        String
+  currentRent        Int
+  currentAvailable   Boolean
+  currentAvailableOn DateTime
+
 
   features String[]
 

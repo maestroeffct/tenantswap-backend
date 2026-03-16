@@ -42,7 +42,8 @@ type ListingNode = {
   currentCity: string;
   currentType: string;
   currentRent: number;
-  availableOn: Date;
+  currentAvailable: boolean;
+  currentAvailableOn: Date;
   features: string[];
   reliabilityScore: number;
 };
@@ -53,7 +54,8 @@ type Recommendation = {
   currentCity: string | null;
   currentType: string | null;
   currentRent: number | null;
-  availableOn: Date | null;
+  currentAvailable: boolean | null;
+  currentAvailableOn: Date | null;
   features: string[];
   relationship: 'ONE_TO_ONE' | 'ONE_WAY';
   score: number;
@@ -230,7 +232,7 @@ export class MatchingService {
 
   private computeTimelineScore(a: ListingNode, b: ListingNode) {
     const diffDays = Math.abs(
-      (new Date(a.availableOn).getTime() - new Date(b.availableOn).getTime()) /
+      (new Date(a.currentAvailableOn).getTime() - new Date(b.currentAvailableOn).getTime()) /
         (1000 * 60 * 60 * 24),
     );
 
@@ -307,7 +309,7 @@ export class MatchingService {
     const typeScore = this.computeTypeScore(a.desiredType, b.currentType);
     if (typeScore === 0) return false;
 
-    return a.maxBudget >= b.currentRent;
+    return b.currentAvailable && a.maxBudget >= b.currentRent;
   }
 
   private recommendationStats(recommendations: Recommendation[]) {
@@ -458,7 +460,8 @@ export class MatchingService {
         currentCity: target?.currentCity ?? null,
         currentType: target?.currentType ?? null,
         currentRent: target?.currentRent ?? null,
-        availableOn: target?.availableOn ?? null,
+        currentAvailable: target?.currentAvailable ?? null,
+        currentAvailableOn: target?.currentAvailableOn ?? null,
         features: target?.features ?? [],
         relationship: candidate.isMutual ? 'ONE_TO_ONE' : 'ONE_WAY',
         score: candidate.totalScore,
@@ -1195,6 +1198,7 @@ export class MatchingService {
       where: {
         userId,
         status: 'ACTIVE',
+        currentAvailable: true,
         OR: [{ expiresAt: null }, { expiresAt: { gte: now } }],
       },
       orderBy: { createdAt: 'desc' },
@@ -1230,7 +1234,8 @@ export class MatchingService {
         currentCity: true,
         currentType: true,
         currentRent: true,
-        availableOn: true,
+        currentAvailable: true,
+        currentAvailableOn: true,
         features: true,
       },
     });
@@ -1244,6 +1249,10 @@ export class MatchingService {
     }
     if (listing.status !== 'ACTIVE') {
       throw new BadRequestException('Listing must be ACTIVE to run matching');
+    }
+
+    if (!listing.currentAvailable) {
+      throw new BadRequestException('Listing is marked unavailable for matching');
     }
 
     const now = new Date();
@@ -1269,6 +1278,7 @@ export class MatchingService {
     const listingRows = await this.prisma.swapListing.findMany({
       where: {
         status: 'ACTIVE',
+        currentAvailable: true,
         OR: [{ expiresAt: null }, { expiresAt: { gte: now } }],
       },
       select: {
@@ -1281,7 +1291,8 @@ export class MatchingService {
         currentCity: true,
         currentType: true,
         currentRent: true,
-        availableOn: true,
+        currentAvailable: true,
+        currentAvailableOn: true,
         features: true,
       },
     });
@@ -1637,6 +1648,10 @@ export class MatchingService {
       throw new BadRequestException('Target listing is no longer active');
     }
 
+    if (!targetListing.currentAvailable) {
+      throw new BadRequestException('Target listing is not currently available');
+    }
+
     if (
       targetListing.expiresAt &&
       targetListing.expiresAt.getTime() < now.getTime()
@@ -1722,6 +1737,10 @@ export class MatchingService {
       );
     }
 
+    if (!requesterListing.currentAvailable) {
+      throw new BadRequestException('Your listing is marked unavailable for matching');
+    }
+
     if (requesterListing.id === targetListing.id) {
       throw new BadRequestException('Invalid request for same listing');
     }
@@ -1736,7 +1755,8 @@ export class MatchingService {
       currentCity: requesterListing.currentCity,
       currentType: requesterListing.currentType,
       currentRent: requesterListing.currentRent,
-      availableOn: requesterListing.availableOn,
+      currentAvailable: requesterListing.currentAvailable,
+      currentAvailableOn: requesterListing.currentAvailableOn,
       features: requesterListing.features,
       reliabilityScore: 100,
     };
@@ -1751,7 +1771,8 @@ export class MatchingService {
       currentCity: targetListing.currentCity,
       currentType: targetListing.currentType,
       currentRent: targetListing.currentRent,
-      availableOn: targetListing.availableOn,
+      currentAvailable: targetListing.currentAvailable,
+      currentAvailableOn: targetListing.currentAvailableOn,
       features: targetListing.features,
       reliabilityScore: 100,
     };
@@ -1860,7 +1881,7 @@ export class MatchingService {
             currentCity: true,
             currentType: true,
             currentRent: true,
-            availableOn: true,
+            currentAvailableOn: true,
             user: {
               select: {
                 id: true,
