@@ -530,8 +530,29 @@
                 "me"
               ]
             },
-            "description": "Get current authenticated user."
-          }
+            "description": "Get current authenticated user bootstrap payload, including profile fields, the user's listings, and each listing's attached matches."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let res = {};",
+                  "let data = {};",
+                  "try { res = pm.response.json(); data = res.data || {}; } catch (e) {}",
+                  "if (data.user && data.user.id) pm.collectionVariables.set(\"userId\", data.user.id);",
+                  "if (data.user && data.user.listings && data.user.listings.length) {",
+                  "  pm.collectionVariables.set(\"listingId\", data.user.listings[0].id);",
+                  "  pm.collectionVariables.set(\"requesterListingId\", data.user.listings[0].id);",
+                  "  if (data.user.listings[0].matches && data.user.listings[0].matches.length) {",
+                  "    pm.collectionVariables.set(\"targetListingId\", data.user.listings[0].matches[0].targetListing.id);",
+                  "  }",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "GET /users/me/reliability",

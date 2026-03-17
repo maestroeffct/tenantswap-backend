@@ -25,6 +25,107 @@ export class UsersService {
       this.config.get<number>('EMAIL_VERIFICATION_TOKEN_TTL_MS') ?? 86_400_000;
   }
 
+
+  async getMe(userId: string) {
+    const user = await this.getProfile(userId);
+
+    if (!user) {
+      throw new UnauthorizedException('Invalid user context');
+    }
+
+    const listings = await this.getListingsWithMatches(userId);
+
+    return {
+      message: 'User profile fetched successfully',
+      user: {
+        ...user,
+        listings,
+      },
+    };
+  }
+
+  private async getListingsWithMatches(userId: string) {
+    const listings = await this.prisma.swapListing.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return Promise.all(
+      listings.map((listing) => this.attachMatchesToListing(listing)),
+    );
+  }
+
+  private async attachMatchesToListing<T extends { id: string }>(listing: T) {
+    const matchCandidates = await this.prisma.matchCandidate.findMany({
+      where: { fromListingId: listing.id },
+      orderBy: [{ totalScore: 'desc' }, { createdAt: 'desc' }],
+    });
+
+    const targetListingIds = matchCandidates.map(
+      (candidate) => candidate.toListingId,
+    );
+
+    const targetListings =
+      targetListingIds.length === 0
+        ? []
+        : await this.prisma.swapListing.findMany({
+            where: {
+              id: {
+                in: targetListingIds,
+              },
+            },
+            select: {
+              id: true,
+              userId: true,
+              status: true,
+              desiredType: true,
+              desiredCity: true,
+              maxBudget: true,
+              timeline: true,
+              currentType: true,
+              currentCity: true,
+              currentRent: true,
+              currentAvailable: true,
+              currentAvailableOn: true,
+              features: true,
+              createdAt: true,
+              expiresAt: true,
+            },
+          });
+
+    const targetListingById = new Map(
+      targetListings.map((targetListing) => [targetListing.id, targetListing] as const),
+    );
+
+    const matches = matchCandidates
+      .map((candidate) => {
+        const targetListing = targetListingById.get(candidate.toListingId);
+        if (!targetListing) {
+          return null;
+        }
+
+        return {
+          id: candidate.id,
+          fromListingId: candidate.fromListingId,
+          toListingId: candidate.toListingId,
+          cityScore: candidate.cityScore,
+          typeScore: candidate.typeScore,
+          budgetScore: candidate.budgetScore,
+          timelineScore: candidate.timelineScore,
+          totalScore: candidate.totalScore,
+          createdAt: candidate.createdAt,
+          targetListing,
+        };
+      })
+      .filter((match): match is NonNullable<typeof match> => match !== null);
+
+    return {
+      ...listing,
+      matchCount: matches.length,
+      matches,
+    };
+  }
+
   async updateProfile(userId: string, dto: UpdateProfileDto) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },

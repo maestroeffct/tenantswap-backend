@@ -18,10 +18,7 @@ export class UsersController {
   @UseGuards(JwtAuthGuard)
   @Get('me')
   getMe(@CurrentUser() user: CurrentUserPayload) {
-    return {
-      message: 'User profile fetched successfully',
-      user,
-    };
+    return this.usersService.getMe(user.id);
   }
 
   @UseGuards(JwtAuthGuard)

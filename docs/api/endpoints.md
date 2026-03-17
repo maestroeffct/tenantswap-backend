@@ -163,7 +163,7 @@ Creating the first listing (`POST /listings`) marks `onboardingComplete=true`. 6
 | POST   | `/auth/phone/send-otp`                           | Yes   | Send phone verification OTP via Termii                    |
 | POST   | `/auth/phone/resend-otp`                         | Yes   | Resend phone verification OTP                             |
 | POST   | `/auth/phone/verify-otp`                         | Yes   | Verify phone OTP and mark phone as verified               |
-| GET    | `/users/me`                                      | Yes   | Current authenticated user                                |
+| GET    | `/users/me`                                      | Yes   | Current authenticated user with listings and matches      |
 | PATCH  | `/users/me`                                      | Yes   | Update profile (fullName/email/phone)                     |
 | PATCH  | `/users/me/password`                             | Yes   | Change account password                                   |
 | GET    | `/users/me/reliability`                          | Yes   | Current user reliability status                           |
@@ -575,6 +575,41 @@ Request header: `x-payment-webhook-secret: <PAYMENT_WEBHOOK_SECRET>`
 
 A successful webhook marks the user subscription as `ACTIVE`.
 When subscription enforcement blocks protected endpoints, API returns `402`.
+
+### GET `/users/me`
+
+Response shape now includes the user profile plus the user's listings, and each listing includes `matchCount` and `matches`.
+
+```json
+{
+  "statusCode": 200,
+  "message": "User profile fetched successfully",
+  "data": {
+    "user": {
+      "id": "u1",
+      "fullName": "Ada Lovelace",
+      "email": "ada@example.com",
+      "listings": [
+        {
+          "id": "listing-1",
+          "matchCount": 1,
+          "matches": [
+            {
+              "id": "match-1",
+              "totalScore": 85,
+              "targetListing": {
+                "id": "listing-2",
+                "desiredType": "1 Bedroom",
+                "desiredCity": "Abuja"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
+```
 
 ### PATCH `/users/me`
 

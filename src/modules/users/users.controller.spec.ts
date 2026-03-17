@@ -9,6 +9,7 @@ import { UsersService } from './users.service';
 describe('UsersController', () => {
   let controller: UsersController;
   const usersServiceMock = {
+    getMe: jest.fn(),
     updateProfile: jest.fn(),
     changePassword: jest.fn(),
   };
@@ -31,12 +32,24 @@ describe('UsersController', () => {
     }).compile();
 
     controller = module.get<UsersController>(UsersController);
+    usersServiceMock.getMe.mockReset();
     usersServiceMock.updateProfile.mockReset();
     usersServiceMock.changePassword.mockReset();
   });
 
   it('should be defined', () => {
     expect(controller).toBeDefined();
+  });
+
+
+  it('should call getMe', async () => {
+    const payload = { id: 'u1' } as any;
+
+    usersServiceMock.getMe.mockResolvedValue({ message: 'ok' });
+
+    await controller.getMe(payload);
+
+    expect(usersServiceMock.getMe).toHaveBeenCalledWith('u1');
   });
 
   it('should call updateProfile', async () => {
