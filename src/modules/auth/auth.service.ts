@@ -302,6 +302,7 @@ export class AuthService {
       where: { phone: normalizedPhone },
       select: {
         id: true,
+        tokenVersion: true,
         fullName: true,
         phone: true,
         email: true,
@@ -380,7 +381,7 @@ export class AuthService {
       );
     }
 
-    const token = this.jwtService.sign({ userId: user.id });
+    const token = this.signAccessToken(user.id, user.tokenVersion);
 
     this.audit('login_success', {
       ip,
@@ -415,6 +416,29 @@ export class AuthService {
     };
   }
 
+  async logout(userId: string, ip: string) {
+    const user = await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        tokenVersion: { increment: 1 },
+      },
+      select: {
+        id: true,
+        tokenVersion: true,
+      },
+    });
+
+    this.audit('logout_success', {
+      ip,
+      userId: user.id,
+      tokenVersion: user.tokenVersion,
+    });
+
+    return {
+      message: 'Logout successful',
+    };
+  }
+
   async verifyEmail(dto: VerifyEmailDto) {
     const tokenHash = this.hashVerificationToken(dto.token);
 
@@ -425,6 +449,7 @@ export class AuthService {
       },
       select: {
         id: true,
+        tokenVersion: true,
         fullName: true,
         phone: true,
         email: true,
@@ -463,7 +488,7 @@ export class AuthService {
       },
     });
 
-    const token = this.jwtService.sign({ userId: user.id });
+    const token = this.signAccessToken(user.id, user.tokenVersion);
 
     this.audit('email_verified', {
       userId: user.id,
@@ -736,6 +761,7 @@ export class AuthService {
       where: { id: userId },
       select: {
         id: true,
+        tokenVersion: true,
         fullName: true,
         phone: true,
         email: true,
@@ -762,7 +788,7 @@ export class AuthService {
       throw new UnauthorizedException('User not found');
     }
 
-    const token = this.jwtService.sign({ userId: userId });
+    const token = this.signAccessToken(user.id, user.tokenVersion);
 
     return {
       message,
@@ -774,6 +800,10 @@ export class AuthService {
       throw new UnauthorizedException('JWT Error');
 
  }
+  }
+
+  private signAccessToken(userId: string, tokenVersion: number) {
+    return this.jwtService.sign({ userId, tokenVersion });
   }
 
   private mapOauthProvider(provider: OAuthProviderType): 'GOOGLE' | 'APPLE' {

@@ -159,6 +159,7 @@ Creating the first listing (`POST /listings`) marks `onboardingComplete=true`. 6
 | POST   | `/auth/verify-email`                             | No    | Verify email token and issue JWT                          |
 | POST   | `/auth/resend-verification`                      | No    | Resend email verification token                           |
 | POST   | `/auth/login`                                    | No    | Login with phone + password                               |
+| POST   | `/auth/logout`                                   | Yes   | Revoke current access tokens for the authenticated user   |
 | POST   | `/auth/phone/send-otp`                           | Yes   | Send phone verification OTP via Termii                    |
 | POST   | `/auth/phone/resend-otp`                         | Yes   | Resend phone verification OTP                             |
 | POST   | `/auth/phone/verify-otp`                         | Yes   | Verify phone OTP and mark phone as verified               |
@@ -170,8 +171,9 @@ Creating the first listing (`POST /listings`) marks `onboardingComplete=true`. 6
 | POST   | `/billing/checkout`                              | Yes   | Create checkout/payment intent metadata                   |
 | POST   | `/billing/webhook`                               | No    | Payment provider webhook callback                         |
 | POST   | `/listings`                                      | Yes   | Create listing                                            |
+| PATCH  | `/listings/:listingId`                           | Yes   | Edit listing details                                      |
 | POST   | `/listings/:listingId/renew`                     | Yes   | Renew/reactivate listing expiry window                    |
-| GET    | `/listings/me`                                   | Yes   | Get my listings                                           |
+| GET    | `/listings/me`                                   | Yes   | Get my listings with attached match summaries             |
 | POST   | `/matching/run`                                  | Yes   | Run matching for latest active listing                    |
 | POST   | `/matching/run/:listingId`                       | Yes   | Run matching for specific listing                         |
 | POST   | `/matching/interests/:targetListingId/request`   | Yes   | Request interest on a target listing                      |
@@ -229,6 +231,20 @@ OAuth request body (same endpoint):
 ```
 
 `onboardingComplete` is backend-controlled and remains `false` until required profile/setup steps are completed.
+
+### POST `/auth/logout`
+
+Response:
+
+```json
+{
+  "statusCode": 200,
+  "message": "Logout successful",
+  "data": {
+    "message": "Logout successful"
+  }
+}
+```
 
 ### POST `/auth/phone/send-otp`
 
@@ -404,6 +420,39 @@ If open/daily request caps are exceeded, API returns `429`.
 6. Confirm renter when finalized.
 7. Use admin endpoints with an admin token when needed.
 
+### PATCH `/listings/:listingId`
+
+Request body (all fields optional):
+
+```json
+{
+  "desiredType": "3-Bedroom Apartment",
+  "desiredCity": "Ibadan",
+  "maxBudget": 3200000,
+  "timeline": "Within 1 month",
+  "currentType": "2-Bedroom Apartment",
+  "currentCity": "Abuja",
+  "currentRent": 2100000,
+  "currentAvailable": false,
+  "currentAvailableOn": "2026-04-10T00:00:00.000Z",
+  "features": ["parking", "security"]
+}
+```
+
+Response:
+
+```json
+{
+  "statusCode": 200,
+  "message": "Listing updated successfully",
+  "data": {
+    "listing": {
+      "id": "uuid"
+    }
+  }
+}
+```
+
 ### POST `/listings/:listingId/renew`
 
 ```json
@@ -417,6 +466,45 @@ If open/daily request caps are exceeded, API returns `429`.
       "expiresAt": "2026-03-10T12:00:00.000Z"
     }
   }
+}
+```
+
+### GET `/listings/me`
+
+Response shape now includes `matchCount` and `matches` on each listing object.
+
+```json
+{
+  "statusCode": 200,
+  "message": "Listings fetched successfully",
+  "data": [
+    {
+      "id": "listing-1",
+      "desiredType": "2 Bedroom",
+      "desiredCity": "Lagos",
+      "currentType": "1 Bedroom",
+      "currentCity": "Abuja",
+      "currentAvailable": true,
+      "matchCount": 1,
+      "matches": [
+        {
+          "id": "match-1",
+          "totalScore": 85,
+          "cityScore": 25,
+          "typeScore": 25,
+          "budgetScore": 20,
+          "timelineScore": 15,
+          "targetListing": {
+            "id": "listing-2",
+            "desiredType": "1 Bedroom",
+            "desiredCity": "Abuja",
+            "currentType": "2 Bedroom",
+            "currentCity": "Lagos"
+          }
+        }
+      ]
+    }
+  ]
 }
 ```
 

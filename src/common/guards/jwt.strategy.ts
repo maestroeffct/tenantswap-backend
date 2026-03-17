@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
@@ -17,8 +17,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate(payload: { userId: string }) {
-    return this.prisma.user.findUnique({
+  async validate(payload: { userId: string; tokenVersion?: number }) {
+    const user = await this.prisma.user.findUnique({
       where: { id: payload.userId },
       select: {
         id: true,
@@ -42,8 +42,20 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         hasLandlordContact: true,
         onboardingComplete: true,
         phoneVerifiedAt: true,
+        tokenVersion: true,
         listings: true,
       },
     });
+
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    if ((payload.tokenVersion ?? 0) !== user.tokenVersion) {
+      throw new UnauthorizedException('Token has been revoked');
+    }
+
+    const { tokenVersion, ...safeUser } = user;
+    return safeUser;
   }
 }

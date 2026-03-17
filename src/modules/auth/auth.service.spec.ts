@@ -55,6 +55,8 @@ describe('AuthService', () => {
   };
 
   beforeEach(async () => {
+    jest.clearAllMocks();
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthService,
@@ -90,5 +92,26 @@ describe('AuthService', () => {
 
   it('should be defined', () => {
     expect(service).toBeDefined();
+  });
+
+  it('revokes active tokens on logout', async () => {
+    prismaMock.user.update.mockResolvedValue({
+      id: 'user-1',
+      tokenVersion: 3,
+    });
+
+    const result = await service.logout('user-1', '127.0.0.1');
+
+    expect(prismaMock.user.update).toHaveBeenCalledWith({
+      where: { id: 'user-1' },
+      data: {
+        tokenVersion: { increment: 1 },
+      },
+      select: {
+        id: true,
+        tokenVersion: true,
+      },
+    });
+    expect(result.message).toBe('Logout successful');
   });
 });

@@ -38,6 +38,7 @@ model User {
   canConnectLandlord          Boolean            @default(false)
   hasLandlordContact          Boolean            @default(false)
   onboardingComplete          Boolean            @default(false)
+  tokenVersion                Int                @default(0)
   phoneVerifiedAt             DateTime?
   phoneVerificationPinId      String?
   phoneVerificationExpiresAt  DateTime?
