@@ -195,6 +195,10 @@ const envSchema = z
       'THROTTLE_MATCH_RUN_LIMIT',
       10,
     ),
+    MATCHING_LIFECYCLE_SWEEP_MS: positiveIntWithDefault(
+      'MATCHING_LIFECYCLE_SWEEP_MS',
+      60_000,
+    ),
     AUTH_LOGIN_MAX_ATTEMPTS: positiveIntWithDefault(
       'AUTH_LOGIN_MAX_ATTEMPTS',
       5,

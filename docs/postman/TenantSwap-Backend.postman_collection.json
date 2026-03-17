@@ -576,6 +576,29 @@
       ]
     },
     {
+      "name": "Notifications",
+      "item": [
+        {
+          "name": "GET /notifications/unread-count",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/notifications/unread-count",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "notifications",
+                "unread-count"
+              ]
+            },
+            "description": "Get unread in-app notification count for the current user."
+          }
+        }
+      ]
+    },
+    {
       "name": "Billing",
       "item": [
         {
