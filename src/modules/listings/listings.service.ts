@@ -2,6 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 import { PrismaService } from '../../common/prisma.service';
+import { MatchingService } from '../matching/matching.service';
 import { CreateListingDto } from './dto/create-listing.dto';
 import { UpdateListingDto } from './dto/update-listing.dto';
 
@@ -13,6 +14,7 @@ export class ListingsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly matchingService: MatchingService,
   ) {
     this.listingActiveTtlHours =
       this.config.get<number>('LISTING_ACTIVE_TTL_HOURS') ?? 336;
@@ -100,6 +102,21 @@ export class ListingsService {
     );
   }
 
+  private async refreshMatchesForListing(listing: { id: string; status: string; currentAvailable: boolean; userId?: string }) {
+    if (listing.status !== 'ACTIVE' || !listing.currentAvailable) {
+      await this.prisma.matchCandidate.deleteMany({
+        where: {
+          OR: [{ fromListingId: listing.id }, { toListingId: listing.id }],
+        },
+      });
+      return null;
+    }
+
+    return this.matchingService.runForListing(listing.id, listing.userId, {
+      skipExpireSweep: true,
+    });
+  }
+
   async createListing(userId: string, dto: CreateListingDto) {
     const listing = await this.prisma.$transaction(async (tx) => {
       const createdListing = await tx.swapListing.create({
@@ -127,6 +144,8 @@ export class ListingsService {
 
       return createdListing;
     });
+
+    await this.refreshMatchesForListing(listing);
 
     return {
       message: 'Listing created successfully',
@@ -182,6 +201,13 @@ export class ListingsService {
       data,
     });
 
+    await this.refreshMatchesForListing({
+      id: updated.id,
+      status: updated.status,
+      currentAvailable: updated.currentAvailable,
+      userId,
+    });
+
     return {
       message: 'Listing updated successfully',
       listing: await this.attachMatchesToListing(updated),
@@ -221,6 +247,13 @@ export class ListingsService {
         closeReason: null,
         closedByUserId: null,
       },
+    });
+
+    await this.refreshMatchesForListing({
+      id: renewed.id,
+      status: renewed.status,
+      currentAvailable: renewed.currentAvailable,
+      userId,
     });
 
     return {

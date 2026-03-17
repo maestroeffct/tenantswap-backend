@@ -8,6 +8,7 @@ import { EmailService } from '../../common/services/email.service';
 import { TermiiService } from '../../common/services/termii.service';
 import { AiService } from './ai.service';
 import { MatchingController } from './matching.controller';
+import { MatchingQueueService } from './matching-queue.service';
 import { MatchingLifecycleService } from './matching-lifecycle.service';
 import { MatchingService } from './matching.service';
 import { NotificationService } from './notification.service';
@@ -17,6 +18,7 @@ import { NotificationService } from './notification.service';
   providers: [
     MatchingService,
     MatchingLifecycleService,
+    MatchingQueueService,
     NotificationService,
     PrismaService,
     AiService,
@@ -26,6 +28,6 @@ import { NotificationService } from './notification.service';
     EmailService,
     TermiiService,
   ],
-  exports: [MatchingService],
+  exports: [MatchingService, MatchingQueueService],
 })
 export class MatchingModule {}

@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { Interval } from '@nestjs/schedule';
 
 import { MatchingService } from './matching.service';
+import { MatchingQueueService } from './matching-queue.service';
 
 @Injectable()
 export class MatchingLifecycleService {
@@ -12,6 +13,7 @@ export class MatchingLifecycleService {
   constructor(
     private readonly matchingService: MatchingService,
     private readonly config: ConfigService,
+    private readonly matchingQueueService: MatchingQueueService,
   ) {
     this.autoSearchSweepEnabled =
       this.config.get<boolean>('AUTO_SEARCH_SWEEP_ENABLED') ?? true;
@@ -20,6 +22,14 @@ export class MatchingLifecycleService {
   @Interval(60_000)
   async sweepExpiredChains() {
     try {
+      const enqueued = await this.matchingQueueService.enqueueLifecycleSweep(
+        'SYSTEM_SWEEP',
+      );
+
+      if (enqueued) {
+        return;
+      }
+
       const listingResult =
         await this.matchingService.expireListings('SYSTEM_SWEEP');
       const chainResult =

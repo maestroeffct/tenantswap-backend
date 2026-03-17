@@ -143,6 +143,39 @@ const envSchema = z
     GOOGLE_OAUTH_CALLBACK_URL: optionalString(),
     GOOGLE_OAUTH_FRONTEND_CALLBACK_URL: optionalString(),
 
+    QUEUE_ENABLED: booleanWithDefault('QUEUE_ENABLED', false),
+    REDIS_HOST: z.any().transform((value) => {
+      if (typeof value === 'string' && value.trim()) {
+        return value.trim();
+      }
+
+      return '127.0.0.1';
+    }),
+    REDIS_PORT: positiveIntWithDefault('REDIS_PORT', 6379),
+    REDIS_PASSWORD: optionalString(),
+    REDIS_DB: z.any().transform((value, ctx) => {
+      if (value === undefined || value === null || value === '') {
+        return 0;
+      }
+
+      const parsed =
+        typeof value === 'number'
+          ? value
+          : typeof value === 'string'
+            ? Number.parseInt(value.trim(), 10)
+            : Number.NaN;
+
+      if (!Number.isInteger(parsed) || parsed < 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'REDIS_DB must be a non-negative integer',
+        });
+        return z.NEVER;
+      }
+
+      return parsed;
+    }),
+
     PORT: positiveIntWithDefault('PORT', 3000),
     THROTTLE_GLOBAL_TTL_MS: positiveIntWithDefault(
       'THROTTLE_GLOBAL_TTL_MS',

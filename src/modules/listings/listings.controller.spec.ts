@@ -8,6 +8,7 @@ import { SubscriptionGuard } from '../../common/guards/subscription.guard';
 import { PrismaService } from '../../common/prisma.service';
 import { ReliabilityGuard } from '../../common/guards/reliability.guard';
 import { ReliabilityService } from '../../common/services/reliability.service';
+import { MatchingService } from '../matching/matching.service';
 
 describe('ListingsController', () => {
   let controller: ListingsController;
@@ -55,6 +56,12 @@ describe('ListingsController', () => {
             updateListing: jest.fn(),
             renewListing: jest.fn(),
             getMyListings: jest.fn(),
+          },
+        },
+        {
+          provide: MatchingService,
+          useValue: {
+            runForListing: jest.fn(),
           },
         },
       ],
