@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
 
+import { MatchingModule } from '../matching/matching.module';
+
 import { PrismaService } from '../../common/prisma.service';
 import { SubscriptionGuard } from '../../common/guards/subscription.guard';
 import { ReliabilityGuard } from '../../common/guards/reliability.guard';
@@ -8,6 +10,7 @@ import { ListingsController } from './listings.controller';
 import { ListingsService } from './listings.service';
 
 @Module({
+  imports: [MatchingModule],
   controllers: [ListingsController],
   providers: [
     ListingsService,

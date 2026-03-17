@@ -125,7 +125,7 @@ Error example:
 5. `POST /listings`
 6. `POST /matching/run`
 
-Creating the first listing (`POST /listings`) marks `onboardingComplete=true`. 6. Chain accept/decline/connect endpoints as needed
+Creating the first listing (`POST /listings`) marks `onboardingComplete=true` and immediately auto-runs matching. 6. Chain accept/decline/connect endpoints as needed
 
 ### B) One-to-Many Interest Flow (new)
 
@@ -150,6 +150,13 @@ Creating the first listing (`POST /listings`) marks `onboardingComplete=true`. 6
 3. Scheduled sweep re-checks watchlisted listings.
 4. When recommendations become available, backend sends in-app + email + SMS alert and disables auto-search for that listing.
 
+
+## Background Matching
+
+- Immediate listing create/update/renew still refreshes matches in-request.
+- When `QUEUE_ENABLED=true`, periodic lifecycle sweeps and auto-search are pushed through BullMQ on Redis.
+- When `QUEUE_ENABLED=false`, the app falls back to the in-process Nest scheduler.
+
 ## Endpoints Summary
 
 | Method | Path                                             | Auth  | Description                                               |
@@ -170,9 +177,9 @@ Creating the first listing (`POST /listings`) marks `onboardingComplete=true`. 6
 | GET    | `/billing/me`                                    | Yes   | Subscription status + tester bypass/access state          |
 | POST   | `/billing/checkout`                              | Yes   | Create checkout/payment intent metadata                   |
 | POST   | `/billing/webhook`                               | No    | Payment provider webhook callback                         |
-| POST   | `/listings`                                      | Yes   | Create listing                                            |
-| PATCH  | `/listings/:listingId`                           | Yes   | Edit listing details                                      |
-| POST   | `/listings/:listingId/renew`                     | Yes   | Renew/reactivate listing expiry window                    |
+| POST   | `/listings`                                      | Yes   | Create listing and auto-run matching                      |
+| PATCH  | `/listings/:listingId`                           | Yes   | Edit listing details and auto-refresh matches             |
+| POST   | `/listings/:listingId/renew`                     | Yes   | Renew/reactivate listing and auto-refresh matches         |
 | GET    | `/listings/me`                                   | Yes   | Get my listings with attached match summaries             |
 | POST   | `/matching/run`                                  | Yes   | Run matching for latest active listing                    |
 | POST   | `/matching/run/:listingId`                       | Yes   | Run matching for specific listing                         |

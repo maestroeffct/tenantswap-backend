@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 
 import { PrismaService } from '../../common/prisma.service';
+import { MatchingService } from '../matching/matching.service';
 import { ListingsService } from './listings.service';
 
 describe('ListingsService', () => {
@@ -21,7 +22,12 @@ describe('ListingsService', () => {
     },
     matchCandidate: {
       findMany: jest.fn(),
+      deleteMany: jest.fn(),
     },
+  };
+
+  const matchingServiceMock = {
+    runForListing: jest.fn(),
   };
 
   const configMock = {
@@ -33,6 +39,7 @@ describe('ListingsService', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    matchingServiceMock.runForListing.mockResolvedValue({ found: false });
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -45,6 +52,10 @@ describe('ListingsService', () => {
           provide: ConfigService,
           useValue: configMock,
         },
+        {
+          provide: MatchingService,
+          useValue: matchingServiceMock,
+        },
       ],
     }).compile();
 
@@ -55,6 +66,75 @@ describe('ListingsService', () => {
     expect(service).toBeDefined();
   });
 
+
+  it('creates a listing and runs matching automatically', async () => {
+    const listing = {
+      id: 'listing-1',
+      userId: 'user-1',
+      desiredType: '2 Bedroom',
+      desiredCity: 'Lagos',
+      maxBudget: 1000000,
+      timeline: '30 days',
+      currentType: '1 Bedroom',
+      currentCity: 'Abuja',
+      currentRent: 600000,
+      currentAvailable: true,
+      currentAvailableOn: new Date('2026-03-20T00:00:00.000Z'),
+      features: ['parking'],
+      status: 'ACTIVE',
+      createdAt: new Date('2026-03-17T10:00:00.000Z'),
+      expiresAt: new Date('2026-04-20T00:00:00.000Z'),
+    };
+
+    prismaMock.$transaction.mockImplementation(async (cb: any) => cb({
+      swapListing: { create: jest.fn().mockResolvedValue(listing) },
+      user: { update: jest.fn().mockResolvedValue({ id: 'user-1' }) },
+    }));
+    prismaMock.matchCandidate.findMany.mockResolvedValue([]);
+
+    const result = await service.createListing('user-1', {
+      desiredType: '2 Bedroom',
+      desiredCity: 'Lagos',
+      maxBudget: 1000000,
+      timeline: '30 days',
+      currentType: '1 Bedroom',
+      currentCity: 'Abuja',
+      currentRent: 600000,
+      currentAvailable: true,
+      currentAvailableOn: '2026-03-20T00:00:00.000Z',
+      features: ['parking'],
+    });
+
+    expect(matchingServiceMock.runForListing).toHaveBeenCalledWith('listing-1', 'user-1', {
+      skipExpireSweep: true,
+    });
+    expect(result.message).toBe('Listing created successfully');
+  });
+
+  it('clears matches when a listing is made unavailable', async () => {
+    prismaMock.swapListing.findFirst.mockResolvedValue({
+      id: 'listing-1',
+      status: 'ACTIVE',
+    });
+    prismaMock.swapListing.update.mockResolvedValue({
+      id: 'listing-1',
+      status: 'ACTIVE',
+      currentAvailable: false,
+    });
+    prismaMock.matchCandidate.findMany.mockResolvedValue([]);
+
+    await service.updateListing('user-1', 'listing-1', {
+      currentAvailable: false,
+    });
+
+    expect(prismaMock.matchCandidate.deleteMany).toHaveBeenCalledWith({
+      where: {
+        OR: [{ fromListingId: 'listing-1' }, { toListingId: 'listing-1' }],
+      },
+    });
+    expect(matchingServiceMock.runForListing).not.toHaveBeenCalled();
+  });
+
   it('updates an owned listing', async () => {
     prismaMock.swapListing.findFirst.mockResolvedValue({
       id: 'listing-1',
@@ -62,22 +142,24 @@ describe('ListingsService', () => {
     });
     prismaMock.swapListing.update.mockResolvedValue({
       id: 'listing-1',
+      status: 'ACTIVE',
       desiredCity: 'Ibadan',
-      currentAvailable: false,
+      currentAvailable: true,
     });
     prismaMock.matchCandidate.findMany.mockResolvedValue([]);
 
     const result = await service.updateListing('user-1', 'listing-1', {
       desiredCity: 'Ibadan',
-      currentAvailable: false,
     });
 
     expect(prismaMock.swapListing.update).toHaveBeenCalledWith({
       where: { id: 'listing-1' },
       data: {
         desiredCity: 'Ibadan',
-        currentAvailable: false,
       },
+    });
+    expect(matchingServiceMock.runForListing).toHaveBeenCalledWith('listing-1', 'user-1', {
+      skipExpireSweep: true,
     });
     expect(result.message).toBe('Listing updated successfully');
   });

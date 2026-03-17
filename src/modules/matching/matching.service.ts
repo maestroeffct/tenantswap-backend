@@ -1318,6 +1318,12 @@ export class MatchingService {
       reliabilityScore: reliabilityByUserId.get(item.userId) ?? 100,
     }));
 
+    await this.prisma.matchCandidate.deleteMany({
+      where: {
+        OR: [{ fromListingId: listingId }, { toListingId: listingId }],
+      },
+    });
+
     const graph = this.buildGraph(listings);
     const listingById = new Map(
       listings.map((item) => [item.id, item] as const),
