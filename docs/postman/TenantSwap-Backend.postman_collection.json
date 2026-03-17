@@ -130,7 +130,9 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/",
-              "host": ["{{baseUrl}}"],
+              "host": [
+                "{{baseUrl}}"
+              ],
               "path": []
             },
             "description": "Basic health route."
@@ -160,8 +162,13 @@
             },
             "url": {
               "raw": "{{baseUrl}}/auth/register",
-              "host": ["{{baseUrl}}"],
-              "path": ["auth", "register"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "register"
+              ]
             },
             "description": "Unified register endpoint for password or oauth registration."
           },
@@ -199,8 +206,13 @@
             },
             "url": {
               "raw": "{{baseUrl}}/auth/register",
-              "host": ["{{baseUrl}}"],
-              "path": ["auth", "register"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "register"
+              ]
             },
             "description": "Use same /auth/register endpoint for OAuth sign-up/sign-in."
           },
@@ -239,8 +251,13 @@
             },
             "url": {
               "raw": "{{baseUrl}}/auth/verify-email",
-              "host": ["{{baseUrl}}"],
-              "path": ["auth", "verify-email"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "verify-email"
+              ]
             },
             "description": "Verify email with token and issue access token."
           },
@@ -278,8 +295,13 @@
             },
             "url": {
               "raw": "{{baseUrl}}/auth/resend-verification",
-              "host": ["{{baseUrl}}"],
-              "path": ["auth", "resend-verification"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "resend-verification"
+              ]
             },
             "description": "Resend verification for unverified email."
           },
@@ -317,8 +339,13 @@
             },
             "url": {
               "raw": "{{baseUrl}}/auth/login",
-              "host": ["{{baseUrl}}"],
-              "path": ["auth", "login"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
             },
             "description": "Login and store access token."
           },
@@ -360,8 +387,14 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/auth/phone/send-otp",
-              "host": ["{{baseUrl}}"],
-              "path": ["auth", "phone", "send-otp"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "phone",
+                "send-otp"
+              ]
             },
             "description": "Send phone verification OTP to logged in user via Termii."
           }
@@ -388,8 +421,14 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/auth/phone/resend-otp",
-              "host": ["{{baseUrl}}"],
-              "path": ["auth", "phone", "resend-otp"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "phone",
+                "resend-otp"
+              ]
             },
             "description": "Resend phone verification OTP (cooldown applies)."
           }
@@ -420,8 +459,14 @@
             },
             "url": {
               "raw": "{{baseUrl}}/auth/phone/verify-otp",
-              "host": ["{{baseUrl}}"],
-              "path": ["auth", "phone", "verify-otp"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "phone",
+                "verify-otp"
+              ]
             },
             "description": "Verify phone OTP and mark phone as verified."
           }
@@ -438,8 +483,13 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/users/me",
-              "host": ["{{baseUrl}}"],
-              "path": ["users", "me"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "me"
+              ]
             },
             "description": "Get current authenticated user."
           }
@@ -451,8 +501,14 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/users/me/reliability",
-              "host": ["{{baseUrl}}"],
-              "path": ["users", "me", "reliability"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "me",
+                "reliability"
+              ]
             },
             "description": "Get current reliability counters and restrictions."
           }
@@ -469,8 +525,13 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/billing/me",
-              "host": ["{{baseUrl}}"],
-              "path": ["billing", "me"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "billing",
+                "me"
+              ]
             },
             "description": "Get current subscription access state."
           }
@@ -487,8 +548,13 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/billing/checkout",
-              "host": ["{{baseUrl}}"],
-              "path": ["billing", "checkout"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "billing",
+                "checkout"
+              ]
             },
             "description": "Initialize checkout metadata.",
             "body": {
@@ -532,8 +598,13 @@
             },
             "url": {
               "raw": "{{baseUrl}}/billing/webhook",
-              "host": ["{{baseUrl}}"],
-              "path": ["billing", "webhook"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "billing",
+                "webhook"
+              ]
             },
             "description": "Simulate payment provider webhook.",
             "body": {
@@ -559,13 +630,17 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/listings",
-              "host": ["{{baseUrl}}"],
-              "path": ["listings"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "listings"
+              ]
             },
             "description": "Create active listing.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"desiredType\": \"2-Bedroom Apartment\",\n  \"desiredCity\": \"Lagos\",\n  \"maxBudget\": 2500000,\n  \"timeline\": \"Within 2 months\",\n  \"currentType\": \"1-Bedroom Apartment\",\n  \"currentCity\": \"Abuja\",\n  \"currentRent\": 1800000,\n  \"availableOn\": \"2026-03-15\",\n  \"features\": [\"parking\", \"balcony\", \"security\"]\n}"
+              "raw": "{\n  \"desiredType\": \"2-Bedroom Apartment\",\n  \"desiredCity\": \"Lagos\",\n  \"maxBudget\": 2500000,\n  \"timeline\": \"Within 2 months\",\n  \"currentType\": \"1-Bedroom Apartment\",\n  \"currentCity\": \"Abuja\",\n  \"currentRent\": 1800000,\n  \"currentAvailable\": true,\n  \"currentAvailableOn\": \"2026-03-15T00:00:00.000Z\",\n  \"features\": [\n    \"parking\",\n    \"balcony\",\n    \"security\"\n  ]\n}"
             }
           },
           "event": [
@@ -587,14 +662,47 @@
           ]
         },
         {
+          "name": "PATCH /listings/:listingId",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/listings/{{listingId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "listings",
+                "{{listingId}}"
+              ]
+            },
+            "description": "Edit an owned listing without renewing it.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"desiredCity\": \"Ibadan\",\n  \"currentAvailable\": false,\n  \"currentAvailableOn\": \"2026-04-10T00:00:00.000Z\"\n}"
+            }
+          }
+        },
+        {
           "name": "POST /listings/:listingId/renew",
           "request": {
             "method": "POST",
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/listings/{{listingId}}/renew",
-              "host": ["{{baseUrl}}"],
-              "path": ["listings", "{{listingId}}", "renew"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "listings",
+                "{{listingId}}",
+                "renew"
+              ]
             },
             "description": "Renew listing expiry and reactivate listing if eligible."
           }
@@ -606,8 +714,13 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/listings/me",
-              "host": ["{{baseUrl}}"],
-              "path": ["listings", "me"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "listings",
+                "me"
+              ]
             },
             "description": "Get my listings."
           },
@@ -640,8 +753,13 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/matching/run",
-              "host": ["{{baseUrl}}"],
-              "path": ["matching", "run"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "matching",
+                "run"
+              ]
             },
             "description": "Run matching for latest active listing."
           },
@@ -668,8 +786,14 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/matching/run/{{listingId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["matching", "run", "{{listingId}}"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "matching",
+                "run",
+                "{{listingId}}"
+              ]
             },
             "description": "Run matching for specific listing."
           },
@@ -701,7 +825,9 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/matching/interests/{{targetListingId}}/request",
-              "host": ["{{baseUrl}}"],
+              "host": [
+                "{{baseUrl}}"
+              ],
               "path": [
                 "matching",
                 "interests",
@@ -737,8 +863,14 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/matching/interests/incoming",
-              "host": ["{{baseUrl}}"],
-              "path": ["matching", "interests", "incoming"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "matching",
+                "interests",
+                "incoming"
+              ]
             },
             "description": "Owner view of all incoming interest requests."
           },
@@ -766,8 +898,14 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/matching/interests/outgoing",
-              "host": ["{{baseUrl}}"],
-              "path": ["matching", "interests", "outgoing"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "matching",
+                "interests",
+                "outgoing"
+              ]
             },
             "description": "Requester view of sent interests."
           }
@@ -779,8 +917,15 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/matching/interests/{{interestId}}/approve",
-              "host": ["{{baseUrl}}"],
-              "path": ["matching", "interests", "{{interestId}}", "approve"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "matching",
+                "interests",
+                "{{interestId}}",
+                "approve"
+              ]
             },
             "description": "Owner approves contact for one request."
           }
@@ -792,8 +937,15 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/matching/interests/{{interestId}}/decline",
-              "host": ["{{baseUrl}}"],
-              "path": ["matching", "interests", "{{interestId}}", "decline"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "matching",
+                "interests",
+                "{{interestId}}",
+                "decline"
+              ]
             },
             "description": "Owner declines one request."
           }
@@ -805,7 +957,9 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/matching/interests/{{interestId}}/confirm-renter",
-              "host": ["{{baseUrl}}"],
+              "host": [
+                "{{baseUrl}}"
+              ],
               "path": [
                 "matching",
                 "interests",
@@ -823,7 +977,9 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/matching/interests/{{interestId}}/confirm-taken",
-              "host": ["{{baseUrl}}"],
+              "host": [
+                "{{baseUrl}}"
+              ],
               "path": [
                 "matching",
                 "interests",
@@ -841,8 +997,14 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/matching/chains/me",
-              "host": ["{{baseUrl}}"],
-              "path": ["matching", "chains", "me"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "matching",
+                "chains",
+                "me"
+              ]
             },
             "description": "Get chains where current user is a member."
           },
@@ -871,8 +1033,14 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/matching/chains/{{chainId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["matching", "chains", "{{chainId}}"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "matching",
+                "chains",
+                "{{chainId}}"
+              ]
             },
             "description": "Get chain details."
           }
@@ -884,8 +1052,15 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/matching/chains/{{chainId}}/accept",
-              "host": ["{{baseUrl}}"],
-              "path": ["matching", "chains", "{{chainId}}", "accept"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "matching",
+                "chains",
+                "{{chainId}}",
+                "accept"
+              ]
             },
             "description": "Accept chain."
           }
@@ -897,8 +1072,15 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/matching/chains/{{chainId}}/decline",
-              "host": ["{{baseUrl}}"],
-              "path": ["matching", "chains", "{{chainId}}", "decline"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "matching",
+                "chains",
+                "{{chainId}}",
+                "decline"
+              ]
             },
             "description": "Decline chain."
           }
@@ -910,8 +1092,15 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/matching/chains/{{chainId}}/connect",
-              "host": ["{{baseUrl}}"],
-              "path": ["matching", "chains", "{{chainId}}", "connect"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "matching",
+                "chains",
+                "{{chainId}}",
+                "connect"
+              ]
             },
             "description": "Request chain contact unlock."
           },
@@ -937,8 +1126,15 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/matching/connect/{{unlockId}}/approve",
-              "host": ["{{baseUrl}}"],
-              "path": ["matching", "connect", "{{unlockId}}", "approve"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "matching",
+                "connect",
+                "{{unlockId}}",
+                "approve"
+              ]
             },
             "description": "Approve chain contact unlock."
           }
@@ -955,8 +1151,14 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/admin/chains/expire-overdue",
-              "host": ["{{baseUrl}}"],
-              "path": ["admin", "chains", "expire-overdue"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "chains",
+                "expire-overdue"
+              ]
             },
             "description": "Admin force-sweep overdue chains.",
             "auth": {
@@ -983,8 +1185,15 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/admin/chains/{{adminChainId}}/break",
-              "host": ["{{baseUrl}}"],
-              "path": ["admin", "chains", "{{adminChainId}}", "break"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "chains",
+                "{{adminChainId}}",
+                "break"
+              ]
             },
             "description": "Admin force-break a chain with reason.",
             "body": {
@@ -1010,8 +1219,15 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/admin/chains/{{adminChainId}}/expire",
-              "host": ["{{baseUrl}}"],
-              "path": ["admin", "chains", "{{adminChainId}}", "expire"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "chains",
+                "{{adminChainId}}",
+                "expire"
+              ]
             },
             "description": "Admin force-expire a chain.",
             "auth": {
@@ -1033,8 +1249,15 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/admin/chains/{{adminChainId}}/rerun",
-              "host": ["{{baseUrl}}"],
-              "path": ["admin", "chains", "{{adminChainId}}", "rerun"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "chains",
+                "{{adminChainId}}",
+                "rerun"
+              ]
             },
             "description": "Admin reruns matching for members of a chain.",
             "auth": {
@@ -1061,8 +1284,15 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/admin/users/{{userId}}/reliability",
-              "host": ["{{baseUrl}}"],
-              "path": ["admin", "users", "{{userId}}", "reliability"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "users",
+                "{{userId}}",
+                "reliability"
+              ]
             },
             "description": "Admin view of user reliability status.",
             "auth": {
@@ -1089,8 +1319,15 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/admin/users/{{userId}}/penalty",
-              "host": ["{{baseUrl}}"],
-              "path": ["admin", "users", "{{userId}}", "penalty"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "users",
+                "{{userId}}",
+                "penalty"
+              ]
             },
             "description": "Admin applies manual reliability penalty.",
             "auth": {
@@ -1121,8 +1358,15 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/admin/users/{{userId}}/unblock",
-              "host": ["{{baseUrl}}"],
-              "path": ["admin", "users", "{{userId}}", "unblock"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "users",
+                "{{userId}}",
+                "unblock"
+              ]
             },
             "description": "Admin clears reliability restrictions.",
             "auth": {

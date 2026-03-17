@@ -170,6 +170,7 @@ Creating the first listing (`POST /listings`) marks `onboardingComplete=true`. 6
 | POST   | `/billing/checkout`                              | Yes   | Create checkout/payment intent metadata                   |
 | POST   | `/billing/webhook`                               | No    | Payment provider webhook callback                         |
 | POST   | `/listings`                                      | Yes   | Create listing                                            |
+| PATCH  | `/listings/:listingId`                           | Yes   | Edit listing details                                      |
 | POST   | `/listings/:listingId/renew`                     | Yes   | Renew/reactivate listing expiry window                    |
 | GET    | `/listings/me`                                   | Yes   | Get my listings                                           |
 | POST   | `/matching/run`                                  | Yes   | Run matching for latest active listing                    |
@@ -403,6 +404,39 @@ If open/daily request caps are exceeded, API returns `429`.
 5. Use incoming/outgoing endpoints to manage requests.
 6. Confirm renter when finalized.
 7. Use admin endpoints with an admin token when needed.
+
+### PATCH `/listings/:listingId`
+
+Request body (all fields optional):
+
+```json
+{
+  "desiredType": "3-Bedroom Apartment",
+  "desiredCity": "Ibadan",
+  "maxBudget": 3200000,
+  "timeline": "Within 1 month",
+  "currentType": "2-Bedroom Apartment",
+  "currentCity": "Abuja",
+  "currentRent": 2100000,
+  "currentAvailable": false,
+  "currentAvailableOn": "2026-04-10T00:00:00.000Z",
+  "features": ["parking", "security"]
+}
+```
+
+Response:
+
+```json
+{
+  "statusCode": 200,
+  "message": "Listing updated successfully",
+  "data": {
+    "listing": {
+      "id": "uuid"
+    }
+  }
+}
+```
 
 ### POST `/listings/:listingId/renew`
 

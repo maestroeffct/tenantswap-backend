@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 
 import { PrismaService } from '../../common/prisma.service';
 import { CreateListingDto } from './dto/create-listing.dto';
+import { UpdateListingDto } from './dto/update-listing.dto';
 
 @Injectable()
 export class ListingsService {
@@ -52,6 +53,60 @@ export class ListingsService {
     return {
       message: 'Listing created successfully',
       listing,
+    };
+  }
+
+  async updateListing(userId: string, listingId: string, dto: UpdateListingDto) {
+    const listing = await this.prisma.swapListing.findFirst({
+      where: {
+        id: listingId,
+        userId,
+      },
+      select: {
+        id: true,
+        status: true,
+      },
+    });
+
+    if (!listing) {
+      throw new BadRequestException('Listing not found');
+    }
+
+    if (listing.status === 'MATCHED') {
+      throw new BadRequestException('Matched listings cannot be edited');
+    }
+
+    const data = {
+      ...(dto.desiredType !== undefined ? { desiredType: dto.desiredType } : {}),
+      ...(dto.desiredCity !== undefined ? { desiredCity: dto.desiredCity } : {}),
+      ...(dto.maxBudget !== undefined ? { maxBudget: dto.maxBudget } : {}),
+      ...(dto.timeline !== undefined ? { timeline: dto.timeline } : {}),
+      ...(dto.currentType !== undefined ? { currentType: dto.currentType } : {}),
+      ...(dto.currentCity !== undefined ? { currentCity: dto.currentCity } : {}),
+      ...(dto.currentRent !== undefined ? { currentRent: dto.currentRent } : {}),
+      ...(dto.currentAvailable !== undefined
+        ? { currentAvailable: dto.currentAvailable }
+        : {}),
+      ...(dto.currentAvailableOn !== undefined
+        ? { currentAvailableOn: new Date(dto.currentAvailableOn) }
+        : {}),
+      ...(dto.features !== undefined ? { features: dto.features } : {}),
+    };
+
+    if (Object.keys(data).length === 0) {
+      throw new BadRequestException('No listing fields provided for update');
+    }
+
+    const updated = await this.prisma.swapListing.update({
+      where: {
+        id: listingId,
+      },
+      data,
+    });
+
+    return {
+      message: 'Listing updated successfully',
+      listing: updated,
     };
   }
 

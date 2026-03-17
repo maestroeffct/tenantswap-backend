@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { CurrentUserPayload } from '../../common/decorators/current-user.decorator';
@@ -6,6 +14,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt.guard';
 import { SubscriptionGuard } from '../../common/guards/subscription.guard';
 import { ReliabilityGuard } from '../../common/guards/reliability.guard';
 import { CreateListingDto } from './dto/create-listing.dto';
+import { UpdateListingDto } from './dto/update-listing.dto';
 import { ListingsService } from './listings.service';
 
 @Controller('listings')
@@ -19,6 +28,16 @@ export class ListingsController {
     @Body() dto: CreateListingDto,
   ) {
     return this.listingsService.createListing(user.id, dto);
+  }
+
+  @UseGuards(JwtAuthGuard, SubscriptionGuard, ReliabilityGuard)
+  @Patch(':listingId')
+  update(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param('listingId') listingId: string,
+    @Body() dto: UpdateListingDto,
+  ) {
+    return this.listingsService.updateListing(user.id, listingId, dto);
   }
 
   @UseGuards(JwtAuthGuard, SubscriptionGuard, ReliabilityGuard)

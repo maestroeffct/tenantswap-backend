@@ -52,6 +52,7 @@ describe('ListingsController', () => {
           provide: ListingsService,
           useValue: {
             createListing: jest.fn(),
+            updateListing: jest.fn(),
             renewListing: jest.fn(),
             getMyListings: jest.fn(),
           },
