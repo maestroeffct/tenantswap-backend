@@ -122,7 +122,7 @@ export class MatchingQueueService implements OnModuleInit, OnModuleDestroy {
         type: 'SWEEP_LIFECYCLE',
       } satisfies SweepLifecycleJob,
       {
-        jobId: `${SWEEP_JOB}:${minuteBucket}`,
+        jobId: `${SWEEP_JOB}_${minuteBucket}`,
       },
     );
 
@@ -142,7 +142,7 @@ export class MatchingQueueService implements OnModuleInit, OnModuleDestroy {
         type: 'RUN_LISTING_MATCH',
       } satisfies RunListingMatchJob,
       {
-        jobId: `${RUN_LISTING_JOB}:${listingId}:${Date.now()}`,
+        jobId: `${RUN_LISTING_JOB}_${listingId}_${Date.now()}`,
       },
     );
 

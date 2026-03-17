@@ -153,6 +153,7 @@ Creating the first listing (`POST /listings`) marks `onboardingComplete=true` an
 
 ## Background Matching
 
+- `MATCHING_LIFECYCLE_SWEEP_MS` controls how often the lifecycle sweep runs. Default is `60000` ms.
 - Immediate listing create/update/renew still refreshes matches in-request.
 - When `QUEUE_ENABLED=true`, periodic lifecycle sweeps and auto-search are pushed through BullMQ on Redis.
 - When `QUEUE_ENABLED=false`, the app falls back to the in-process Nest scheduler.
@@ -175,6 +176,7 @@ Creating the first listing (`POST /listings`) marks `onboardingComplete=true` an
 | PATCH  | `/users/me/password`                             | Yes   | Change account password                                   |
 | GET    | `/users/me/reliability`                          | Yes   | Current user reliability status                           |
 | GET    | `/billing/me`                                    | Yes   | Subscription status + tester bypass/access state          |
+| GET    | `/notifications/unread-count`                      | Yes   | Get unread in-app notification count                      |
 | POST   | `/billing/checkout`                              | Yes   | Create checkout/payment intent metadata                   |
 | POST   | `/billing/webhook`                               | No    | Payment provider webhook callback                         |
 | POST   | `/listings`                                      | Yes   | Create listing and auto-run matching                      |
@@ -249,6 +251,18 @@ Response:
   "message": "Logout successful",
   "data": {
     "message": "Logout successful"
+  }
+}
+```
+
+### GET `/notifications/unread-count`
+
+```json
+{
+  "statusCode": 200,
+  "message": "Unread notification count fetched successfully",
+  "data": {
+    "unreadCount": 5
   }
 }
 ```

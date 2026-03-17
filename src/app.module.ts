@@ -15,6 +15,7 @@ import { ListingsModule } from './modules/listings/listings.module';
 import { MatchingModule } from './modules/matching/matching.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { BillingModule } from './modules/billing/billing.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 import { validateEnv } from './config/env.validation';
 import { GoogleStrategy } from './common/strategies/google.strategy';
 
@@ -47,6 +48,7 @@ import { GoogleStrategy } from './common/strategies/google.strategy';
     MatchingModule,
     AdminModule,
     BillingModule,
+    NotificationsModule,
   ],
   providers: [
     {

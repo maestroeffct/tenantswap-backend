@@ -1,14 +1,15 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Interval } from '@nestjs/schedule';
 
 import { MatchingService } from './matching.service';
 import { MatchingQueueService } from './matching-queue.service';
 
 @Injectable()
-export class MatchingLifecycleService {
+export class MatchingLifecycleService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(MatchingLifecycleService.name);
   private readonly autoSearchSweepEnabled: boolean;
+  private readonly sweepIntervalMs: number;
+  private intervalRef?: NodeJS.Timeout;
 
   constructor(
     private readonly matchingService: MatchingService,
@@ -17,9 +18,27 @@ export class MatchingLifecycleService {
   ) {
     this.autoSearchSweepEnabled =
       this.config.get<boolean>('AUTO_SEARCH_SWEEP_ENABLED') ?? true;
+    this.sweepIntervalMs =
+      this.config.get<number>('MATCHING_LIFECYCLE_SWEEP_MS') ?? 60_000;
   }
 
-  @Interval(60_000)
+  onModuleInit() {
+    this.intervalRef = setInterval(() => {
+      void this.sweepExpiredChains();
+    }, this.sweepIntervalMs);
+
+    this.logger.log(
+      `Matching lifecycle sweep scheduled every ${this.sweepIntervalMs}ms`,
+    );
+  }
+
+  onModuleDestroy() {
+    if (this.intervalRef) {
+      clearInterval(this.intervalRef);
+      this.intervalRef = undefined;
+    }
+  }
+
   async sweepExpiredChains() {
     try {
       const enqueued = await this.matchingQueueService.enqueueLifecycleSweep(
