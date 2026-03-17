@@ -5,6 +5,7 @@ import { PrismaService } from '../../common/prisma.service';
 import { CreateListingDto } from './dto/create-listing.dto';
 import { UpdateListingDto } from './dto/update-listing.dto';
 
+
 @Injectable()
 export class ListingsService {
   private readonly listingActiveTtlHours: number;
@@ -20,6 +21,83 @@ export class ListingsService {
   private computeListingExpiresAt(from = new Date()) {
     const durationMs = this.listingActiveTtlHours * 60 * 60 * 1000;
     return new Date(from.getTime() + durationMs);
+  }
+
+  private async attachMatchesToListing<T extends { id: string }>(listing: T) {
+    const matchCandidates = await this.prisma.matchCandidate.findMany({
+      where: { fromListingId: listing.id },
+      orderBy: [{ totalScore: 'desc' }, { createdAt: 'desc' }],
+    });
+
+    const targetListingIds = matchCandidates.map(
+      (candidate) => candidate.toListingId,
+    );
+
+    const targetListings =
+      targetListingIds.length === 0
+        ? []
+        : await this.prisma.swapListing.findMany({
+            where: {
+              id: {
+                in: targetListingIds,
+              },
+            },
+            select: {
+              id: true,
+              userId: true,
+              status: true,
+              desiredType: true,
+              desiredCity: true,
+              maxBudget: true,
+              timeline: true,
+              currentType: true,
+              currentCity: true,
+              currentRent: true,
+              currentAvailable: true,
+              currentAvailableOn: true,
+              features: true,
+              createdAt: true,
+              expiresAt: true,
+            },
+          });
+
+    const targetListingById = new Map(
+      targetListings.map((targetListing) => [targetListing.id, targetListing] as const),
+    );
+
+    const matches = matchCandidates
+      .map((candidate) => {
+        const targetListing = targetListingById.get(candidate.toListingId);
+        if (!targetListing) {
+          return null;
+        }
+
+        return {
+          id: candidate.id,
+          fromListingId: candidate.fromListingId,
+          toListingId: candidate.toListingId,
+          cityScore: candidate.cityScore,
+          typeScore: candidate.typeScore,
+          budgetScore: candidate.budgetScore,
+          timelineScore: candidate.timelineScore,
+          totalScore: candidate.totalScore,
+          createdAt: candidate.createdAt,
+          targetListing,
+        };
+      })
+      .filter((match): match is NonNullable<typeof match> => match !== null);
+
+    return {
+      ...listing,
+      matchCount: matches.length,
+      matches,
+    };
+  }
+
+  private async attachMatchesToListings<T extends { id: string }>(listings: T[]) {
+    return Promise.all(
+      listings.map((listing) => this.attachMatchesToListing(listing)),
+    );
   }
 
   async createListing(userId: string, dto: CreateListingDto) {
@@ -52,7 +130,7 @@ export class ListingsService {
 
     return {
       message: 'Listing created successfully',
-      listing,
+      listing: await this.attachMatchesToListing(listing),
     };
   }
 
@@ -106,7 +184,7 @@ export class ListingsService {
 
     return {
       message: 'Listing updated successfully',
-      listing: updated,
+      listing: await this.attachMatchesToListing(updated),
     };
   }
 
@@ -148,14 +226,16 @@ export class ListingsService {
     return {
       success: true,
       message: 'Listing renewed successfully',
-      listing: renewed,
+      listing: await this.attachMatchesToListing(renewed),
     };
   }
 
   async getMyListings(userId: string) {
-    return this.prisma.swapListing.findMany({
+    const listings = await this.prisma.swapListing.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' },
     });
+
+    return this.attachMatchesToListings(listings);
   }
 }

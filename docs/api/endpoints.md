@@ -173,7 +173,7 @@ Creating the first listing (`POST /listings`) marks `onboardingComplete=true`. 6
 | POST   | `/listings`                                      | Yes   | Create listing                                            |
 | PATCH  | `/listings/:listingId`                           | Yes   | Edit listing details                                      |
 | POST   | `/listings/:listingId/renew`                     | Yes   | Renew/reactivate listing expiry window                    |
-| GET    | `/listings/me`                                   | Yes   | Get my listings                                           |
+| GET    | `/listings/me`                                   | Yes   | Get my listings with attached match summaries             |
 | POST   | `/matching/run`                                  | Yes   | Run matching for latest active listing                    |
 | POST   | `/matching/run/:listingId`                       | Yes   | Run matching for specific listing                         |
 | POST   | `/matching/interests/:targetListingId/request`   | Yes   | Request interest on a target listing                      |
@@ -466,6 +466,45 @@ Response:
       "expiresAt": "2026-03-10T12:00:00.000Z"
     }
   }
+}
+```
+
+### GET `/listings/me`
+
+Response shape now includes `matchCount` and `matches` on each listing object.
+
+```json
+{
+  "statusCode": 200,
+  "message": "Listings fetched successfully",
+  "data": [
+    {
+      "id": "listing-1",
+      "desiredType": "2 Bedroom",
+      "desiredCity": "Lagos",
+      "currentType": "1 Bedroom",
+      "currentCity": "Abuja",
+      "currentAvailable": true,
+      "matchCount": 1,
+      "matches": [
+        {
+          "id": "match-1",
+          "totalScore": 85,
+          "cityScore": 25,
+          "typeScore": 25,
+          "budgetScore": 20,
+          "timelineScore": 15,
+          "targetListing": {
+            "id": "listing-2",
+            "desiredType": "1 Bedroom",
+            "desiredCity": "Abuja",
+            "currentType": "2 Bedroom",
+            "currentCity": "Lagos"
+          }
+        }
+      ]
+    }
+  ]
 }
 ```
 
