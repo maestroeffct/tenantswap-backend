@@ -159,6 +159,7 @@ Creating the first listing (`POST /listings`) marks `onboardingComplete=true`. 6
 | POST   | `/auth/verify-email`                             | No    | Verify email token and issue JWT                          |
 | POST   | `/auth/resend-verification`                      | No    | Resend email verification token                           |
 | POST   | `/auth/login`                                    | No    | Login with phone + password                               |
+| POST   | `/auth/logout`                                   | Yes   | Revoke current access tokens for the authenticated user   |
 | POST   | `/auth/phone/send-otp`                           | Yes   | Send phone verification OTP via Termii                    |
 | POST   | `/auth/phone/resend-otp`                         | Yes   | Resend phone verification OTP                             |
 | POST   | `/auth/phone/verify-otp`                         | Yes   | Verify phone OTP and mark phone as verified               |
@@ -230,6 +231,20 @@ OAuth request body (same endpoint):
 ```
 
 `onboardingComplete` is backend-controlled and remains `false` until required profile/setup steps are completed.
+
+### POST `/auth/logout`
+
+Response:
+
+```json
+{
+  "statusCode": 200,
+  "message": "Logout successful",
+  "data": {
+    "message": "Logout successful"
+  }
+}
+```
 
 ### POST `/auth/phone/send-otp`
 

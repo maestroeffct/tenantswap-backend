@@ -1,16 +1,16 @@
-import { Body, Controller, Get, Ip, Post, Req,Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Ip, Post, Req, Res, UseGuards } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { CurrentUserPayload } from '../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt.guard';
+import { GoogleOAuthGuard } from '../../common/guards/google-oauth.guard';
+import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { VerifyPhoneOtpDto } from './dto/verify-phone-otp.dto';
-import { AuthService } from './auth.service';
-import { GoogleOAuthGuard } from 'src/common/guards/google-oauth.guard';
 
 @Controller('auth')
 export class AuthController {
@@ -21,10 +21,10 @@ export class AuthController {
   @Get('sso/google')
   googleAuth() {}
 
-   @UseGuards(GoogleOAuthGuard)
+  @UseGuards(GoogleOAuthGuard)
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Get('sso/google/callback')
-  googleAuthCallback(@Req() req: any, @Res() res: any){
+  googleAuthCallback(@Req() req: any, @Res() res: any) {
     return this.authService.sso(req, res);
   }
 
@@ -38,6 +38,12 @@ export class AuthController {
   @Post('login')
   login(@Body() dto: LoginDto, @Ip() ip: string) {
     return this.authService.login(dto, ip);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('logout')
+  logout(@CurrentUser() user: CurrentUserPayload, @Ip() ip: string) {
+    return this.authService.logout(user.id, ip);
   }
 
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
