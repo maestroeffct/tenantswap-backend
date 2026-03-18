@@ -35,6 +35,7 @@ describe('MatchingService', () => {
     },
     matchCandidate: {
       upsert: jest.fn(),
+      deleteMany: jest.fn(),
     },
     swapChain: {
       findUnique: jest.fn(),
@@ -96,6 +97,7 @@ describe('MatchingService', () => {
     prismaMock.swapListing.updateMany.mockResolvedValue({ count: 0 });
     prismaMock.user.findMany.mockResolvedValue([]);
     prismaMock.listingInterest.count.mockResolvedValue(0);
+    prismaMock.matchCandidate.deleteMany.mockResolvedValue({ count: 0 });
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [

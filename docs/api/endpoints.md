@@ -441,6 +441,31 @@ If open/daily request caps are exceeded, API returns `429`.
 6. Confirm renter when finalized.
 7. Use admin endpoints with an admin token when needed.
 
+### POST `/listings`
+
+Request body:
+
+```json
+{
+  "desiredType": "2-Bedroom Apartment",
+  "desiredState": "Lagos",
+  "desiredCity": "Ikeja",
+  "desiredArea": "Maryland",
+  "maxBudget": 2500000,
+  "timeline": "Within 2 months",
+  "currentType": "1-Bedroom Apartment",
+  "currentState": "FCT",
+  "currentCity": "Abuja",
+  "currentArea": "Wuse 2",
+  "currentRent": 1800000,
+  "currentAvailable": true,
+  "currentAvailableOn": "2026-03-15T00:00:00.000Z",
+  "features": ["parking", "balcony", "security"]
+}
+```
+
+`currentAvailableOn` may be `null` when `currentAvailable` is `false`.
+
 ### PATCH `/listings/:listingId`
 
 Request body (all fields optional):
@@ -448,14 +473,18 @@ Request body (all fields optional):
 ```json
 {
   "desiredType": "3-Bedroom Apartment",
+  "desiredState": "Oyo",
   "desiredCity": "Ibadan",
+  "desiredArea": "Bodija",
   "maxBudget": 3200000,
   "timeline": "Within 1 month",
   "currentType": "2-Bedroom Apartment",
+  "currentState": "FCT",
   "currentCity": "Abuja",
+  "currentArea": null,
   "currentRent": 2100000,
   "currentAvailable": false,
-  "currentAvailableOn": "2026-04-10T00:00:00.000Z",
+  "currentAvailableOn": null,
   "features": ["parking", "security"]
 }
 ```
@@ -502,9 +531,13 @@ Response shape now includes `matchCount` and `matches` on each listing object.
     {
       "id": "listing-1",
       "desiredType": "2 Bedroom",
-      "desiredCity": "Lagos",
+      "desiredState": "Lagos",
+      "desiredCity": "Ikeja",
+      "desiredArea": "Maryland",
       "currentType": "1 Bedroom",
+      "currentState": "FCT",
       "currentCity": "Abuja",
+      "currentArea": "Wuse 2",
       "currentAvailable": true,
       "matchCount": 1,
       "matches": [
@@ -518,9 +551,13 @@ Response shape now includes `matchCount` and `matches` on each listing object.
           "targetListing": {
             "id": "listing-2",
             "desiredType": "1 Bedroom",
+            "desiredState": "FCT",
             "desiredCity": "Abuja",
+            "desiredArea": "Wuse 2",
             "currentType": "2 Bedroom",
-            "currentCity": "Lagos"
+            "currentState": "Lagos",
+            "currentCity": "Ikeja",
+            "currentArea": "Maryland"
           }
         }
       ]
@@ -621,7 +658,9 @@ Response shape now includes the user profile plus the user's listings, and each 
               "targetListing": {
                 "id": "listing-2",
                 "desiredType": "1 Bedroom",
-                "desiredCity": "Abuja"
+                "desiredState": "FCT",
+                "desiredCity": "Abuja",
+                "desiredArea": "Wuse 2"
               }
             }
           ]

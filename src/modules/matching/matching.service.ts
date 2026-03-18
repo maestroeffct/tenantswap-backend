@@ -35,15 +35,19 @@ type Edge = {
 type ListingNode = {
   id: string;
   userId: string;
+  desiredState: string;
   desiredCity: string;
+  desiredArea: string | null;
   desiredType: string;
   maxBudget: number;
   timeline: string;
+  currentState: string;
   currentCity: string;
+  currentArea: string | null;
   currentType: string;
   currentRent: number;
   currentAvailable: boolean;
-  currentAvailableOn: Date;
+  currentAvailableOn: Date | null;
   features: string[];
   reliabilityScore: number;
 };
@@ -51,7 +55,9 @@ type ListingNode = {
 type Recommendation = {
   listingId: string;
   userId: string | null;
+  currentState: string | null;
   currentCity: string | null;
+  currentArea: string | null;
   currentType: string | null;
   currentRent: number | null;
   currentAvailable: boolean | null;
@@ -198,15 +204,76 @@ export class MatchingService {
     return value.trim().toLowerCase();
   }
 
-  private computeLocationScore(desiredCity: string, currentCity: string) {
-    const desired = this.normalize(desiredCity);
-    const current = this.normalize(currentCity);
+  private normalizeNullable(value?: string | null) {
+    if (!value) {
+      return '';
+    }
 
-    if (desired === current) return 30;
+    return this.normalize(value);
+  }
 
-    const desiredTokens = desired.split(/[,\-/\s]+/).filter(Boolean);
-    const currentTokens = new Set(current.split(/[,\-/\s]+/).filter(Boolean));
-    const shareToken = desiredTokens.some((token) => currentTokens.has(token));
+  private tokenizeLocation(...values: Array<string | null | undefined>) {
+    return values
+      .flatMap((value) => this.normalizeNullable(value).split(/[,\-/\s]+/))
+      .filter(Boolean);
+  }
+
+  private computeLocationScore(a: ListingNode, b: ListingNode) {
+    const desiredState = this.normalizeNullable(a.desiredState);
+    const currentState = this.normalizeNullable(b.currentState);
+    const desiredCity = this.normalizeNullable(a.desiredCity);
+    const currentCity = this.normalizeNullable(b.currentCity);
+    const desiredArea = this.normalizeNullable(a.desiredArea);
+    const currentArea = this.normalizeNullable(b.currentArea);
+
+    let score = 0;
+    let usedStructuredLocation = false;
+
+    if (desiredState && currentState) {
+      usedStructuredLocation = true;
+      if (desiredState === currentState) {
+        score += 15;
+      }
+    }
+
+    if (desiredCity && currentCity) {
+      usedStructuredLocation = true;
+      if (desiredCity === currentCity) {
+        score += 10;
+      }
+    }
+
+    if (desiredArea && currentArea) {
+      usedStructuredLocation = true;
+
+      if (desiredArea === currentArea) {
+        score += 5;
+      } else {
+        const desiredAreaTokens = new Set(this.tokenizeLocation(desiredArea));
+        const currentAreaTokens = this.tokenizeLocation(currentArea);
+        const hasPartialAreaMatch = currentAreaTokens.some((token) =>
+          desiredAreaTokens.has(token),
+        );
+
+        if (hasPartialAreaMatch) {
+          score += 3;
+        }
+      }
+    }
+
+    if (usedStructuredLocation) {
+      return score;
+    }
+
+    const desiredTokens = new Set(
+      this.tokenizeLocation(a.desiredArea, a.desiredCity, a.desiredState),
+    );
+    const currentTokens = this.tokenizeLocation(
+      b.currentArea,
+      b.currentCity,
+      b.currentState,
+    );
+    const shareToken = currentTokens.some((token) => desiredTokens.has(token));
 
     return shareToken ? 15 : 0;
   }
@@ -231,8 +298,12 @@ export class MatchingService {
   }
 
   private computeTimelineScore(a: ListingNode, b: ListingNode) {
+    if (!a.currentAvailableOn || !b.currentAvailableOn) {
+      return 0;
+    }
+
     const diffDays = Math.abs(
-      (new Date(a.currentAvailableOn).getTime() - new Date(b.currentAvailableOn).getTime()) /
+      (a.currentAvailableOn.getTime() - b.currentAvailableOn.getTime()) /
         (1000 * 60 * 60 * 24),
     );
 
@@ -274,7 +345,7 @@ export class MatchingService {
   }
 
   private computeScore(a: ListingNode, b: ListingNode) {
-    const cityScore = this.computeLocationScore(a.desiredCity, b.currentCity);
+    const cityScore = this.computeLocationScore(a, b);
     const typeScore = this.computeTypeScore(a.desiredType, b.currentType);
     const budgetScore = this.computeBudgetScore(a.maxBudget, b.currentRent);
     const timelineScore = this.computeTimelineScore(a, b);
@@ -457,7 +528,9 @@ export class MatchingService {
       return {
         listingId: candidate.to,
         userId: target?.userId ?? null,
+        currentState: target?.currentState ?? null,
         currentCity: target?.currentCity ?? null,
+        currentArea: target?.currentArea ?? null,
         currentType: target?.currentType ?? null,
         currentRent: target?.currentRent ?? null,
         currentAvailable: target?.currentAvailable ?? null,
@@ -1227,11 +1300,15 @@ export class MatchingService {
         userId: true,
         status: true,
         expiresAt: true,
+        desiredState: true,
         desiredCity: true,
+        desiredArea: true,
         desiredType: true,
         maxBudget: true,
         timeline: true,
+        currentState: true,
         currentCity: true,
+        currentArea: true,
         currentType: true,
         currentRent: true,
         currentAvailable: true,
@@ -1284,11 +1361,15 @@ export class MatchingService {
       select: {
         id: true,
         userId: true,
+        desiredState: true,
         desiredCity: true,
+        desiredArea: true,
         desiredType: true,
         maxBudget: true,
         timeline: true,
+        currentState: true,
         currentCity: true,
+        currentArea: true,
         currentType: true,
         currentRent: true,
         currentAvailable: true,
@@ -1462,7 +1543,9 @@ export class MatchingService {
       }
 
       const tips = this.aiService.suggestNoMatch({
+        desiredState: listing.desiredState,
         desiredCity: listing.desiredCity,
+        desiredArea: listing.desiredArea,
         desiredType: listing.desiredType,
         maxBudget: listing.maxBudget,
         timeline: listing.timeline,
@@ -1612,10 +1695,14 @@ export class MatchingService {
           hasAccepted: member.hasAccepted,
           fullName: listing?.user.fullName ?? null,
           phone: approvalsOk ? (listing?.user.phone ?? null) : null,
+          currentState: listing?.currentState ?? null,
           currentCity: listing?.currentCity ?? null,
+          currentArea: listing?.currentArea ?? null,
           currentType: listing?.currentType ?? null,
           currentRent: listing?.currentRent ?? null,
+          desiredState: listing?.desiredState ?? null,
           desiredCity: listing?.desiredCity ?? null,
+          desiredArea: listing?.desiredArea ?? null,
         };
       }),
       contactUnlocked: Boolean(approvalsOk),
@@ -1754,11 +1841,15 @@ export class MatchingService {
     const requesterNode: ListingNode = {
       id: requesterListing.id,
       userId: requesterListing.userId,
+      desiredState: requesterListing.desiredState,
       desiredCity: requesterListing.desiredCity,
+      desiredArea: requesterListing.desiredArea,
       desiredType: requesterListing.desiredType,
       maxBudget: requesterListing.maxBudget,
       timeline: requesterListing.timeline,
+      currentState: requesterListing.currentState,
       currentCity: requesterListing.currentCity,
+      currentArea: requesterListing.currentArea,
       currentType: requesterListing.currentType,
       currentRent: requesterListing.currentRent,
       currentAvailable: requesterListing.currentAvailable,
@@ -1770,11 +1861,15 @@ export class MatchingService {
     const targetNode: ListingNode = {
       id: targetListing.id,
       userId: targetListing.userId,
+      desiredState: targetListing.desiredState,
       desiredCity: targetListing.desiredCity,
+      desiredArea: targetListing.desiredArea,
       desiredType: targetListing.desiredType,
       maxBudget: targetListing.maxBudget,
       timeline: targetListing.timeline,
+      currentState: targetListing.currentState,
       currentCity: targetListing.currentCity,
+      currentArea: targetListing.currentArea,
       currentType: targetListing.currentType,
       currentRent: targetListing.currentRent,
       currentAvailable: targetListing.currentAvailable,
@@ -1871,7 +1966,9 @@ export class MatchingService {
           select: {
             id: true,
             status: true,
+            currentState: true,
             currentCity: true,
+            currentArea: true,
             currentType: true,
             currentRent: true,
             createdAt: true,
@@ -1880,11 +1977,15 @@ export class MatchingService {
         requesterListing: {
           select: {
             id: true,
+            desiredState: true,
             desiredCity: true,
+            desiredArea: true,
             desiredType: true,
             maxBudget: true,
             timeline: true,
+            currentState: true,
             currentCity: true,
+            currentArea: true,
             currentType: true,
             currentRent: true,
             currentAvailableOn: true,
@@ -1908,7 +2009,9 @@ export class MatchingService {
       {
         listingId: string;
         listingStatus: string;
+        currentState: string;
         currentCity: string;
+        currentArea: string | null;
         currentType: string;
         currentRent: number;
         openRequests: number;
@@ -1933,7 +2036,9 @@ export class MatchingService {
         grouped.set(key, {
           listingId: interest.listing.id,
           listingStatus: interest.listing.status,
+          currentState: interest.listing.currentState,
           currentCity: interest.listing.currentCity,
+          currentArea: interest.listing.currentArea,
           currentType: interest.listing.currentType,
           currentRent: interest.listing.currentRent,
           openRequests: 0,
@@ -1985,7 +2090,9 @@ export class MatchingService {
           select: {
             id: true,
             status: true,
+            currentState: true,
             currentCity: true,
+            currentArea: true,
             currentType: true,
             currentRent: true,
             user: {
@@ -2019,7 +2126,9 @@ export class MatchingService {
         listing: {
           id: interest.listing.id,
           status: interest.listing.status,
+          currentState: interest.listing.currentState,
           currentCity: interest.listing.currentCity,
+          currentArea: interest.listing.currentArea,
           currentType: interest.listing.currentType,
           currentRent: interest.listing.currentRent,
         },

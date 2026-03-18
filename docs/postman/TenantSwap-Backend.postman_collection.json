@@ -723,7 +723,7 @@
             "description": "Create active listing.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"desiredType\": \"2-Bedroom Apartment\",\n  \"desiredCity\": \"Lagos\",\n  \"maxBudget\": 2500000,\n  \"timeline\": \"Within 2 months\",\n  \"currentType\": \"1-Bedroom Apartment\",\n  \"currentCity\": \"Abuja\",\n  \"currentRent\": 1800000,\n  \"currentAvailable\": true,\n  \"currentAvailableOn\": \"2026-03-15T00:00:00.000Z\",\n  \"features\": [\n    \"parking\",\n    \"balcony\",\n    \"security\"\n  ]\n}"
+              "raw": "{\n  \"desiredType\": \"2-Bedroom Apartment\",\n  \"desiredState\": \"Lagos\",\n  \"desiredCity\": \"Ikeja\",\n  \"desiredArea\": \"Maryland\",\n  \"maxBudget\": 2500000,\n  \"timeline\": \"Within 2 months\",\n  \"currentType\": \"1-Bedroom Apartment\",\n  \"currentState\": \"FCT\",\n  \"currentCity\": \"Abuja\",\n  \"currentArea\": \"Wuse 2\",\n  \"currentRent\": 1800000,\n  \"currentAvailable\": true,\n  \"currentAvailableOn\": \"2026-03-15T00:00:00.000Z\",\n  \"features\": [\n    \"parking\",\n    \"balcony\",\n    \"security\"\n  ]\n}"
             }
           },
           "event": [
@@ -767,7 +767,7 @@
             "description": "Edit an owned listing without renewing it.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"desiredCity\": \"Ibadan\",\n  \"currentAvailable\": false,\n  \"currentAvailableOn\": \"2026-04-10T00:00:00.000Z\"\n}"
+              "raw": "{\n  \"desiredState\": \"Oyo\",\n  \"desiredCity\": \"Ibadan\",\n  \"desiredArea\": \"Bodija\",\n  \"currentState\": \"FCT\",\n  \"currentCity\": \"Abuja\",\n  \"currentArea\": null,\n  \"currentAvailable\": false,\n  \"currentAvailableOn\": null\n}"
             }
           }
         },

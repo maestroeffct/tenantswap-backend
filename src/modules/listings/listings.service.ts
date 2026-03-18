@@ -6,7 +6,6 @@ import { MatchingService } from '../matching/matching.service';
 import { CreateListingDto } from './dto/create-listing.dto';
 import { UpdateListingDto } from './dto/update-listing.dto';
 
-
 @Injectable()
 export class ListingsService {
   private readonly listingActiveTtlHours: number;
@@ -23,6 +22,26 @@ export class ListingsService {
   private computeListingExpiresAt(from = new Date()) {
     const durationMs = this.listingActiveTtlHours * 60 * 60 * 1000;
     return new Date(from.getTime() + durationMs);
+  }
+
+  private normalizeNullableString(value?: string | null) {
+    if (typeof value !== 'string') {
+      return null;
+    }
+
+    const trimmed = value.trim();
+    return trimmed ? trimmed : null;
+  }
+
+  private mapCurrentAvailableOn(
+    currentAvailable: boolean,
+    currentAvailableOn?: string | null,
+  ) {
+    if (!currentAvailable || !currentAvailableOn) {
+      return null;
+    }
+
+    return new Date(currentAvailableOn);
   }
 
   private async attachMatchesToListing<T extends { id: string }>(listing: T) {
@@ -49,11 +68,15 @@ export class ListingsService {
               userId: true,
               status: true,
               desiredType: true,
+              desiredState: true,
               desiredCity: true,
+              desiredArea: true,
               maxBudget: true,
               timeline: true,
               currentType: true,
+              currentState: true,
               currentCity: true,
+              currentArea: true,
               currentRent: true,
               currentAvailable: true,
               currentAvailableOn: true,
@@ -102,7 +125,12 @@ export class ListingsService {
     );
   }
 
-  private async refreshMatchesForListing(listing: { id: string; status: string; currentAvailable: boolean; userId?: string }) {
+  private async refreshMatchesForListing(listing: {
+    id: string;
+    status: string;
+    currentAvailable: boolean;
+    userId?: string;
+  }) {
     if (listing.status !== 'ACTIVE' || !listing.currentAvailable) {
       await this.prisma.matchCandidate.deleteMany({
         where: {
@@ -118,19 +146,28 @@ export class ListingsService {
   }
 
   async createListing(userId: string, dto: CreateListingDto) {
+    const currentAvailableOn = this.mapCurrentAvailableOn(
+      dto.currentAvailable,
+      dto.currentAvailableOn,
+    );
+
     const listing = await this.prisma.$transaction(async (tx) => {
       const createdListing = await tx.swapListing.create({
         data: {
           userId,
           desiredType: dto.desiredType,
+          desiredState: dto.desiredState,
           desiredCity: dto.desiredCity,
+          desiredArea: this.normalizeNullableString(dto.desiredArea),
           maxBudget: dto.maxBudget,
           timeline: dto.timeline,
           currentType: dto.currentType,
+          currentState: dto.currentState,
           currentCity: dto.currentCity,
+          currentArea: this.normalizeNullableString(dto.currentArea),
           currentRent: dto.currentRent,
           currentAvailable: dto.currentAvailable,
-          currentAvailableOn: new Date(dto.currentAvailableOn),
+          currentAvailableOn,
           features: dto.features,
           status: 'ACTIVE',
           expiresAt: this.computeListingExpiresAt(),
@@ -175,17 +212,30 @@ export class ListingsService {
 
     const data = {
       ...(dto.desiredType !== undefined ? { desiredType: dto.desiredType } : {}),
+      ...(dto.desiredState !== undefined ? { desiredState: dto.desiredState } : {}),
       ...(dto.desiredCity !== undefined ? { desiredCity: dto.desiredCity } : {}),
+      ...(dto.desiredArea !== undefined
+        ? { desiredArea: this.normalizeNullableString(dto.desiredArea) }
+        : {}),
       ...(dto.maxBudget !== undefined ? { maxBudget: dto.maxBudget } : {}),
       ...(dto.timeline !== undefined ? { timeline: dto.timeline } : {}),
       ...(dto.currentType !== undefined ? { currentType: dto.currentType } : {}),
+      ...(dto.currentState !== undefined ? { currentState: dto.currentState } : {}),
       ...(dto.currentCity !== undefined ? { currentCity: dto.currentCity } : {}),
+      ...(dto.currentArea !== undefined
+        ? { currentArea: this.normalizeNullableString(dto.currentArea) }
+        : {}),
       ...(dto.currentRent !== undefined ? { currentRent: dto.currentRent } : {}),
       ...(dto.currentAvailable !== undefined
         ? { currentAvailable: dto.currentAvailable }
         : {}),
-      ...(dto.currentAvailableOn !== undefined
-        ? { currentAvailableOn: new Date(dto.currentAvailableOn) }
+      ...(dto.currentAvailable === false ? { currentAvailableOn: null } : {}),
+      ...(dto.currentAvailableOn !== undefined && dto.currentAvailable !== false
+        ? {
+            currentAvailableOn: dto.currentAvailableOn
+              ? new Date(dto.currentAvailableOn)
+              : null,
+          }
         : {}),
       ...(dto.features !== undefined ? { features: dto.features } : {}),
     };

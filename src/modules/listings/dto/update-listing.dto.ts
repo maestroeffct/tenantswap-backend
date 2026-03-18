@@ -5,6 +5,7 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  ValidateIf,
 } from 'class-validator';
 
 export class UpdateListingDto {
@@ -14,7 +15,15 @@ export class UpdateListingDto {
 
   @IsOptional()
   @IsString()
+  desiredState?: string;
+
+  @IsOptional()
+  @IsString()
   desiredCity?: string;
+
+  @IsOptional()
+  @IsString()
+  desiredArea?: string | null;
 
   @IsOptional()
   @IsInt()
@@ -30,7 +39,15 @@ export class UpdateListingDto {
 
   @IsOptional()
   @IsString()
+  currentState?: string;
+
+  @IsOptional()
+  @IsString()
   currentCity?: string;
+
+  @IsOptional()
+  @IsString()
+  currentArea?: string | null;
 
   @IsOptional()
   @IsInt()
@@ -41,8 +58,9 @@ export class UpdateListingDto {
   currentAvailable?: boolean;
 
   @IsOptional()
+  @ValidateIf((_, value) => value !== null)
   @IsDateString()
-  currentAvailableOn?: string;
+  currentAvailableOn?: string | null;
 
   @IsOptional()
   @IsArray()

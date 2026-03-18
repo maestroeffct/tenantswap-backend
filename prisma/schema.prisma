@@ -64,17 +64,21 @@ model SwapListing {
   status ListingStatus @default(DRAFT)
 
   // WHAT USER IS LOOKING FOR
-  desiredType String
-  desiredCity String
-  maxBudget   Int
-  timeline    String
+  desiredType  String
+  desiredState String
+  desiredCity  String
+  desiredArea  String?
+  maxBudget    Int
+  timeline     String
 
   // WHAT USER IS LEAVING
   currentType        String
+  currentState       String
   currentCity        String
+  currentArea        String?
   currentRent        Int
   currentAvailable   Boolean
-  currentAvailableOn DateTime
+  currentAvailableOn DateTime?
 
 
   features String[]

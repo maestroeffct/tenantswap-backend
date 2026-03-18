@@ -1,12 +1,26 @@
-import { IsString, IsInt, IsDateString, IsArray, IsBoolean } from 'class-validator';
+import {
+  IsArray,
+  IsBoolean,
+  IsDateString,
+  IsInt,
+  IsOptional,
+  IsString,
+  ValidateIf,
+} from 'class-validator';
 
 export class CreateListingDto {
-  // LOOKING FOR
   @IsString()
   desiredType: string;
 
   @IsString()
+  desiredState: string;
+
+  @IsString()
   desiredCity: string;
+
+  @IsOptional()
+  @IsString()
+  desiredArea?: string | null;
 
   @IsInt()
   maxBudget: number;
@@ -14,12 +28,18 @@ export class CreateListingDto {
   @IsString()
   timeline: string;
 
-  // LEAVING
   @IsString()
   currentType: string;
 
   @IsString()
+  currentState: string;
+
+  @IsString()
   currentCity: string;
+
+  @IsOptional()
+  @IsString()
+  currentArea?: string | null;
 
   @IsInt()
   currentRent: number;
@@ -27,8 +47,9 @@ export class CreateListingDto {
   @IsBoolean()
   currentAvailable: boolean;
 
+  @ValidateIf((object) => object.currentAvailable !== false)
   @IsDateString()
-  currentAvailableOn: string;
+  currentAvailableOn?: string | null;
 
   @IsArray()
   features: string[];
