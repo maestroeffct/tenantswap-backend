@@ -108,6 +108,7 @@ export class NotificationService {
         id: true,
         email: true,
         phone: true,
+        fullName: true,
       },
     });
 

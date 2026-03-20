@@ -1,0 +1,18 @@
+{
+      "extends": "./tsconfig.json",
+
+      "compilerOptions": {
+            "composite": false,
+            "jsx": "react-jsx",
+            "skipLibCheck": true,
+            "strict": true,
+            "noEmit": true,
+            "strictNullChecks": true,
+            "jsxImportSource": "react",
+            "module": "commonjs",
+            "moduleResolution": "node"
+
+      },
+      "include": [ "**/emails/**/*", "src/email.tsx" ],
+      "exclude": [ "node_modules", ".react-email" ]
+}

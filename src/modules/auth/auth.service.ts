@@ -182,12 +182,14 @@ export class AuthService {
         emailVerificationTokenHash: tokenArtifacts.tokenHash,
         emailVerificationExpiresAt: tokenArtifacts.expiresAt,
       },
-      select: { id: true, email: true },
+      select: { id: true, fullName: true, email: true },
     });
 
     const emailDispatch = await this.dispatchVerificationEmail(
       normalizedEmail,
       tokenArtifacts.rawToken,
+      user.fullName
+
     );
 
     this.audit('register_success', {
@@ -507,7 +509,7 @@ export class AuthService {
 
     const user = await this.prisma.user.findUnique({
       where: { email: normalizedEmail },
-      select: { id: true, email: true, emailVerifiedAt: true },
+      select: { id: true, fullName: true, email: true, emailVerifiedAt: true },
     });
 
     let verificationToken: string | undefined;
@@ -533,6 +535,7 @@ export class AuthService {
       const emailDispatch = await this.dispatchVerificationEmail(
         normalizedEmail,
         tokenArtifacts.rawToken,
+        user.fullName
       );
 
       this.audit('verification_resend_delivery', {
@@ -1016,11 +1019,12 @@ export class AuthService {
     return `${this.frontendVerifyEmailUrl}${separator}token=${token}`;
   }
 
-  private async dispatchVerificationEmail(email: string, token: string) {
+  private async dispatchVerificationEmail(email: string, token: string, fullName: string) {
     const verificationUrl = this.buildVerificationUrl(token);
     const result = await this.emailService.sendVerificationEmail({
       email,
       verificationUrl,
+      fullName
     });
 
     if (!result.delivered) {

@@ -138,6 +138,16 @@ const envSchema = z
 
       return 'http://localhost:3000/verify-email';
     }),
+    FRONTEND_URL: z.any().transform((value) => {
+      if (typeof value === 'string' && value.trim()) {
+        return value.trim();
+      }
+
+      return 'http://localhost:3000';
+    }),
+    SUPPORT_EMAIL: optionalString(),
+    COMPANY_NAME: optionalString(),
+
     GOOGLE_OAUTH_CLIENT_ID: optionalString(),
     GOOGLE_OAUTH_CLIENT_SECRET: optionalString(),
     GOOGLE_OAUTH_CALLBACK_URL: optionalString(),

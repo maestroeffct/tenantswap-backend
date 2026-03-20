@@ -1,10 +1,16 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import nodemailer, { type Transporter } from 'nodemailer';
+import VerifyEmail from 'emails/VerifyEmail';
+import MatchEmail from 'emails/MatchEmail';
+import { render } from '@react-email/components';
+import React from 'react';
 
 export type VerificationEmailInput = {
+  fullName: string;
   email: string;
   verificationUrl: string;
+
 };
 
 export type SystemEmailInput = {
@@ -80,17 +86,24 @@ export class EmailService {
       'If you did not request this, please ignore this email.',
     ].join('\n');
 
-    const html = `
-      <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #0f172a;">
-        <h2 style="margin: 0 0 12px;">Welcome to TenantSwap</h2>
-        <p style="margin: 0 0 12px;">Please verify your email to continue.</p>
-        <p style="margin: 0 0 18px;">
-          <a href="${input.verificationUrl}" style="display:inline-block;padding:10px 16px;background:#0b9f6a;color:#fff;text-decoration:none;border-radius:6px;">Verify Email</a>
-        </p>
-        <p style="margin: 0 0 6px;">Or copy this link:</p>
-        <p style="margin: 0; word-break: break-all;">${input.verificationUrl}</p>
-      </div>
-    `;
+    // const html = `
+    //   <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #0f172a;">
+    //     <h2 style="margin: 0 0 12px;">Welcome to TenantSwap</h2>
+    //     <p style="margin: 0 0 12px;">Please verify your email to continue.</p>
+    //     <p style="margin: 0 0 18px;">
+    //       <a href="${input.verificationUrl}" style="display:inline-block;padding:10px 16px;background:#0b9f6a;color:#fff;text-decoration:none;border-radius:6px;">Verify Email</a>
+    //     </p>
+    //     <p style="margin: 0 0 6px;">Or copy this link:</p>
+    //     <p style="margin: 0; word-break: break-all;">${input.verificationUrl}</p>
+    //   </div>
+    // `;
+
+const template = React.createElement(VerifyEmail, {
+  fullName:input.fullName,
+  verificationUrl:input.verificationUrl,
+  appUrl:this.config.get<string>('FRONTEND_URL') as string});
+
+    const html = await render(template);
 
     return this.dispatchEmail({
       type: 'verification',
@@ -107,18 +120,23 @@ export class EmailService {
       textLines.push('', input.actionUrl);
     }
 
-    const actionHtml =
-      input.actionLabel && input.actionUrl
-        ? `<p style="margin: 0 0 18px;"><a href="${input.actionUrl}" style="display:inline-block;padding:10px 16px;background:#0b9f6a;color:#fff;text-decoration:none;border-radius:6px;">${input.actionLabel}</a></p>`
-        : '';
+    const frontendUrl = this.config.get<string>('FRONTEND_URL') as string;
+    const supportEmail = this.config.get<string>('SUPPORT_EMAIL') ?? "support@tenantswap.com";
+    const companyName = this.config.get<string>('COMPANY_NAME') ?? "TenantSwap";
 
-    const html = `
-      <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #0f172a;">
-        <h2 style="margin: 0 0 12px;">${input.title}</h2>
-        <p style="margin: 0 0 12px;">${input.message}</p>
-        ${actionHtml}
-      </div>
-    `;
+    const template = React.createElement(MatchEmail, {
+      title: input.title,
+      message: input.message,
+      actionLabel: input.actionLabel ?? "Go to Dashboard",
+      actionUrl: input.actionUrl ?? `${frontendUrl}/dashboard`,
+      footerNote: "Go to your dashboard to see your matches.",
+      previewText: input.subject,
+      appUrl: frontendUrl,
+       supportEmail:supportEmail,
+      companyName: companyName,
+    });
+
+    const html = await render(template);
 
     return this.dispatchEmail({
       type: 'notification',

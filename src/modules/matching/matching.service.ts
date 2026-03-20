@@ -1929,7 +1929,7 @@ export class MatchingService {
         userId: requesterUserId,
         type: 'INTEREST_REQUESTED',
         title: 'Request Sent',
-        message: `Your request was sent to ${targetListing.user.fullName}.`,
+        message: `Your match request was sent to ${targetListing.user.fullName}.`,
         channels: ['IN_APP', 'EMAIL', 'SMS'],
         payload: {
           interestId: interest.id,
