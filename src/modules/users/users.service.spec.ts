@@ -18,7 +18,7 @@ describe('UsersService', () => {
     matchCandidate: {
       findMany: jest.fn(),
     },
-  } as unknown as PrismaService;
+  };
 
   const configMock = {
     get: jest.fn((key: string) => {
@@ -32,7 +32,7 @@ describe('UsersService', () => {
 
       return undefined;
     }),
-  } as unknown as ConfigService;
+  };
 
   let service: UsersService;
 
@@ -42,7 +42,10 @@ describe('UsersService', () => {
     prismaMock.swapListing.findMany = jest.fn();
     prismaMock.matchCandidate.findMany = jest.fn();
 
-    service = new UsersService(prismaMock, configMock);
+    service = new UsersService(
+      prismaMock as unknown as PrismaService,
+      configMock as unknown as ConfigService,
+    );
   });
 
   it('should be defined', () => {
