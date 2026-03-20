@@ -122,6 +122,29 @@ Requester finalizes an approved request from their side. Backend then:
 - reruns matching for released users
 - notifies affected users
 
+## Live Dashboard Updates
+
+The backend now exposes an authenticated SSE stream at `GET /events/stream`. Use it for immediate dashboard refreshes instead of polling.
+
+Recommended client setup:
+
+- open one SSE connection after login using a client that can send `Authorization: Bearer <accessToken>`
+- keep `/users/me` as the source of truth for listings + matches
+- on `matches.updated` or `user.refresh`, refetch `GET /users/me`
+- on `notifications.updated`, refetch `GET /notifications/unread-count`
+- on `interests.updated`, refetch `GET /matching/interests/incoming` and `GET /matching/interests/outgoing` as needed
+
+Event types:
+
+- `connected`
+- `heartbeat`
+- `matches.updated`
+- `interests.updated`
+- `notifications.updated`
+- `user.refresh`
+
+SSE is one-way. Keep normal REST endpoints for user actions like request/approve/decline/confirm.
+
 ## UI Rules
 
 - Show request actions only to listing owner.

@@ -5,6 +5,7 @@ import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma.service';
 import { EmailService } from '../../common/services/email.service';
 import { TermiiService } from '../../common/services/termii.service';
+import { EventsService } from '../events/events.service';
 
 export type NotificationChannel = 'IN_APP' | 'EMAIL' | 'SMS';
 
@@ -29,6 +30,7 @@ export class NotificationService {
     private readonly emailService: EmailService,
     private readonly termiiService: TermiiService,
     private readonly config: ConfigService,
+    private readonly eventsService: EventsService,
   ) {
     this.emailEnabled =
       this.config.get<boolean>('NOTIFICATION_EMAIL_ENABLED') ?? true;
@@ -67,6 +69,7 @@ export class NotificationService {
       this.logger.log(
         `[NOTIFY] type=${notification.type} userId=${notification.userId} chainId=${notification.chainId ?? 'n/a'} channels=${notification.channels.join(',')} message="${notification.message}"`,
       );
+      this.emitRealtimeSignals(notification);
     }
 
     const shouldSendEmail =
@@ -108,7 +111,6 @@ export class NotificationService {
         id: true,
         email: true,
         phone: true,
-        fullName: true,
       },
     });
 
@@ -155,6 +157,54 @@ export class NotificationService {
     if (deliveryTasks.length > 0) {
       await Promise.allSettled(deliveryTasks);
     }
+  }
+
+  private emitRealtimeSignals(notification: {
+    userId: string;
+    type: string;
+    chainId?: string;
+  }) {
+    const emittedAt = new Date().toISOString();
+
+    this.eventsService.emitToUser(notification.userId, 'notifications.updated', {
+      notificationType: notification.type,
+      chainId: notification.chainId ?? null,
+      emittedAt,
+    });
+
+    if (
+      notification.type.startsWith('INTEREST_') ||
+      notification.type === 'RENTER_CONFIRMED'
+    ) {
+      this.eventsService.emitToUser(notification.userId, 'interests.updated', {
+        notificationType: notification.type,
+        emittedAt,
+      });
+    }
+
+    if (
+      [
+        'AUTO_RECOMMENDATION_FOUND',
+        'REQUEST_RELEASED',
+        'LISTING_EXPIRED',
+        'CHAIN_BROKEN',
+        'CHAIN_PENDING',
+        'CHAIN_LOCKED',
+        'MATCH_RERUN',
+      ].includes(notification.type)
+    ) {
+      this.eventsService.emitToUser(notification.userId, 'matches.updated', {
+        notificationType: notification.type,
+        chainId: notification.chainId ?? null,
+        emittedAt,
+      });
+    }
+
+    this.eventsService.emitToUser(notification.userId, 'user.refresh', {
+      notificationType: notification.type,
+      chainId: notification.chainId ?? null,
+      emittedAt,
+    });
   }
 
   private resolveChannels(

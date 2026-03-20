@@ -83,6 +83,7 @@ Required/runtime variables currently used by the backend:
 - Verification emails are sent via SMTP (HTML + text); if SMTP is unavailable, backend logs a fallback verification link.
 - Phone verification OTP uses Termii (`/auth/phone/send-otp`, `/auth/phone/resend-otp`, `/auth/phone/verify-otp`).
 - Matching notifications can now fan out to in-app + email + SMS for request/approval/decline and auto-search match discovery.
+- Authenticated clients can open an SSE stream at `GET /events/stream` for immediate `matches`, `interests`, and notification refresh triggers.
 
 Global response envelope (success and errors):
 
@@ -171,6 +172,7 @@ Creating the first listing (`POST /listings`) marks `onboardingComplete=true` an
 | POST   | `/auth/phone/send-otp`                           | Yes   | Send phone verification OTP via Termii                    |
 | POST   | `/auth/phone/resend-otp`                         | Yes   | Resend phone verification OTP                             |
 | POST   | `/auth/phone/verify-otp`                         | Yes   | Verify phone OTP and mark phone as verified               |
+| GET    | `/events/stream`                                 | Yes   | Authenticated SSE stream for live dashboard refresh       |
 | GET    | `/users/me`                                      | Yes   | Current authenticated user with listings and matches      |
 | PATCH  | `/users/me`                                      | Yes   | Update profile (fullName/email/phone)                     |
 | PATCH  | `/users/me/password`                             | Yes   | Change account password                                   |
@@ -265,6 +267,38 @@ Response:
     "unreadCount": 5
   }
 }
+```
+
+### GET `/events/stream`
+
+This is a Server-Sent Events endpoint. It keeps the HTTP connection open and pushes lightweight events to the authenticated client.
+
+Headers:
+
+- `Authorization: Bearer <accessToken>`
+- `Accept: text/event-stream`
+
+Event types currently emitted:
+
+- `connected`
+- `heartbeat`
+- `matches.updated`
+- `interests.updated`
+- `notifications.updated`
+- `user.refresh`
+
+Typical client behavior:
+
+- keep one SSE connection open after login
+- on `matches.updated` or `user.refresh`, refetch `GET /users/me`
+- on `notifications.updated`, refetch `GET /notifications/unread-count`
+- on `interests.updated`, refetch incoming/outgoing interest lists
+
+Example event payload:
+
+```text
+event: matches.updated
+data: {"type":"matches.updated","listingId":"listing-uuid","reason":"listing_created","emittedAt":"2026-03-20T12:00:00.000Z"}
 ```
 
 ### POST `/auth/phone/send-otp`

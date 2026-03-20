@@ -2,6 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 import { PrismaService } from '../../common/prisma.service';
+import { EventsService } from '../events/events.service';
 import { MatchingService } from '../matching/matching.service';
 import { CreateListingDto } from './dto/create-listing.dto';
 import { UpdateListingDto } from './dto/update-listing.dto';
@@ -14,6 +15,7 @@ export class ListingsService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly matchingService: MatchingService,
+    private readonly eventsService: EventsService,
   ) {
     this.listingActiveTtlHours =
       this.config.get<number>('LISTING_ACTIVE_TTL_HOURS') ?? 336;
@@ -42,6 +44,20 @@ export class ListingsService {
     }
 
     return new Date(currentAvailableOn);
+  }
+
+
+  private emitListingEvents(userId: string, listingId: string, reason: string) {
+    this.eventsService.emitToUser(userId, 'matches.updated', {
+      listingId,
+      reason,
+      emittedAt: new Date().toISOString(),
+    });
+    this.eventsService.emitToUser(userId, 'user.refresh', {
+      reason,
+      listingId,
+      emittedAt: new Date().toISOString(),
+    });
   }
 
   private async attachMatchesToListing<T extends { id: string }>(listing: T) {
@@ -137,6 +153,9 @@ export class ListingsService {
           OR: [{ fromListingId: listing.id }, { toListingId: listing.id }],
         },
       });
+      if (listing.userId) {
+        this.emitListingEvents(listing.userId, listing.id, 'listing_unavailable');
+      }
       return null;
     }
 
@@ -183,6 +202,7 @@ export class ListingsService {
     });
 
     await this.refreshMatchesForListing(listing);
+    this.emitListingEvents(userId, listing.id, 'listing_created');
 
     return {
       message: 'Listing created successfully',
@@ -257,6 +277,7 @@ export class ListingsService {
       currentAvailable: updated.currentAvailable,
       userId,
     });
+    this.emitListingEvents(userId, updated.id, 'listing_updated');
 
     return {
       message: 'Listing updated successfully',
@@ -305,6 +326,7 @@ export class ListingsService {
       currentAvailable: renewed.currentAvailable,
       userId,
     });
+    this.emitListingEvents(userId, renewed.id, 'listing_renewed');
 
     return {
       success: true,

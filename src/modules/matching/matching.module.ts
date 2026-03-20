@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 
+import { EventsModule } from '../events/events.module';
 import { PrismaService } from '../../common/prisma.service';
 import { SubscriptionGuard } from '../../common/guards/subscription.guard';
 import { ReliabilityGuard } from '../../common/guards/reliability.guard';
@@ -14,6 +15,7 @@ import { MatchingService } from './matching.service';
 import { NotificationService } from './notification.service';
 
 @Module({
+  imports: [EventsModule],
   controllers: [MatchingController],
   providers: [
     MatchingService,
