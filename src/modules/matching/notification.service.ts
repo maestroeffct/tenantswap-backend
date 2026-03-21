@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import type { Prisma } from '@prisma/client';
 
 import { PrismaService } from '../../common/prisma.service';
-import { EmailService } from '../../common/services/email.service';
+import { EmailQueueService } from '../../common/services/email-queue.service';
 import { TermiiService } from '../../common/services/termii.service';
 import { EventsService } from '../events/events.service';
 
@@ -27,7 +27,7 @@ export class NotificationService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly emailService: EmailService,
+    private readonly emailQueueService: EmailQueueService,
     private readonly termiiService: TermiiService,
     private readonly config: ConfigService,
     private readonly eventsService: EventsService,
@@ -226,7 +226,7 @@ export class NotificationService {
       userId: string;
     },
   ): Promise<void> {
-    const result = await this.emailService.sendSystemEmail({
+    const result = await this.emailQueueService.enqueueSystemEmail({
       email,
       subject: `TenantSwap: ${input.title}`,
       title: input.title,
@@ -234,7 +234,7 @@ export class NotificationService {
     });
 
     this.logger.log(
-      `[NOTIFY_EMAIL] type=${input.type} userId=${input.userId} email=${email} delivered=${result.delivered} provider=${result.provider}`,
+      `[NOTIFY_EMAIL] type=${input.type} userId=${input.userId} email=${email} queued=${result.queued} mode=${result.mode}`,
     );
   }
 

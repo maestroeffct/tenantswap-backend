@@ -14,7 +14,7 @@ import { compare, hash } from 'bcrypt';
 import { createHash, randomBytes } from 'crypto';
 
 import { PrismaService } from '../../common/prisma.service';
-import { EmailService } from '../../common/services/email.service';
+import { EmailQueueService } from '../../common/services/email-queue.service';
 import {
   OauthService,
   type OAuthProviderType,
@@ -68,7 +68,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly config: ConfigService,
-    private readonly emailService: EmailService,
+    private readonly emailQueueService: EmailQueueService,
     private readonly termiiService: TermiiService,
     private readonly oauthService: OauthService,
   ) {
@@ -196,12 +196,8 @@ export class AuthService {
       ip,
       userId: user.id,
       email: user.email,
-      emailDelivered: emailDispatch.delivered,
-      emailProvider: emailDispatch.provider,
-      emailAttempts: emailDispatch.attempts,
-      ...(emailDispatch.messageId
-        ? { emailMessageId: emailDispatch.messageId }
-        : {}),
+      emailQueued: emailDispatch.queued,
+      emailDispatchMode: emailDispatch.mode,
       ...(emailDispatch.error ? { emailError: emailDispatch.error } : {}),
     });
 
@@ -542,12 +538,8 @@ export class AuthService {
         ip,
         userId: user.id,
         email: normalizedEmail,
-        emailDelivered: emailDispatch.delivered,
-        emailProvider: emailDispatch.provider,
-        emailAttempts: emailDispatch.attempts,
-        ...(emailDispatch.messageId
-          ? { emailMessageId: emailDispatch.messageId }
-          : {}),
+        emailQueued: emailDispatch.queued,
+        emailDispatchMode: emailDispatch.mode,
         ...(emailDispatch.error ? { emailError: emailDispatch.error } : {}),
       });
     } else {
@@ -1021,24 +1013,12 @@ export class AuthService {
 
   private async dispatchVerificationEmail(email: string, token: string, fullName: string) {
     const verificationUrl = this.buildVerificationUrl(token);
-    const result = await this.emailService.sendVerificationEmail({
+
+    return this.emailQueueService.enqueueVerificationEmail({
       email,
       verificationUrl,
-      fullName
+      fullName,
     });
-
-    if (!result.delivered) {
-      this.logVerificationLink(email, token);
-    }
-
-    return result;
-  }
-
-  private logVerificationLink(email: string, token: string): void {
-    const verificationUrl = this.buildVerificationUrl(token);
-    this.logger.warn(
-      `[EMAIL_FALLBACK_LINK] email=${email} verificationUrl=${verificationUrl}`,
-    );
   }
 
   private audit(event: string, metadata: Record<string, unknown>): void {

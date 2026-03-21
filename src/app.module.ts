@@ -19,6 +19,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { EventsModule } from './modules/events/events.module';
 import { validateEnv } from './config/env.validation';
 import { GoogleStrategy } from './common/strategies/google.strategy';
+import { EmailModule } from './common/email.module';
 
 @Module({
   controllers: [AppController],
@@ -43,6 +44,7 @@ import { GoogleStrategy } from './common/strategies/google.strategy';
     ScheduleModule.forRoot(),
 
     PassportModule,
+    EmailModule,
     UsersModule,
     AuthModule,
     ListingsModule,

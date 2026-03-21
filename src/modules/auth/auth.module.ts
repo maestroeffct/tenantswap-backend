@@ -3,7 +3,6 @@ import { ConfigService } from "@nestjs/config";
 import { JwtModule } from "@nestjs/jwt";
 
 import { PrismaService } from "../../common/prisma.service";
-import { EmailService } from "../../common/services/email.service";
 import { OauthService } from "../../common/services/oauth.service";
 import { TermiiService } from "../../common/services/termii.service";
 import { AuthController } from "./auth.controller";
@@ -54,7 +53,6 @@ function parseJwtExpiresInToSeconds(value: string): number {
   providers: [
     AuthService,
     PrismaService,
-    EmailService,
     TermiiService,
     OauthService,
     GoogleStrategy,

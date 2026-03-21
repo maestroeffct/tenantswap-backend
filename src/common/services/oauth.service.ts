@@ -7,7 +7,6 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
-
 export type OAuthProviderType = 'google' | 'apple';
 
 export type OAuthIdentity = {
@@ -38,7 +37,6 @@ export class OauthService {
 
   private async verifyGoogleIdToken(idToken: string): Promise<OAuthIdentity> {
     const expectedClientId = this.config.get<string>('GOOGLE_OAUTH_CLIENT_ID');
-
 
     if (!expectedClientId) {
       throw new ServiceUnavailableException('Google OAuth is not configured');

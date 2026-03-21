@@ -1,9 +1,13 @@
+jest.mock('../../common/services/email-queue.service', () => ({
+  EmailQueueService: class EmailQueueService {},
+}));
+
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 
 import { PrismaService } from '../../common/prisma.service';
-import { EmailService } from '../../common/services/email.service';
+import { EmailQueueService } from '../../common/services/email-queue.service';
 import { OauthService } from '../../common/services/oauth.service';
 import { TermiiService } from '../../common/services/termii.service';
 import { AuthService } from './auth.service';
@@ -36,12 +40,10 @@ describe('AuthService', () => {
     sign: jest.fn(),
   };
 
-  const emailServiceMock = {
-    sendVerificationEmail: jest.fn(() => ({
-      delivered: true,
-      provider: 'smtp',
-      attempts: 1,
-      messageId: 'msg-1',
+  const emailQueueServiceMock = {
+    enqueueVerificationEmail: jest.fn(() => ({
+      queued: true,
+      mode: 'detached',
     })),
   };
 
@@ -73,8 +75,8 @@ describe('AuthService', () => {
           useValue: jwtMock,
         },
         {
-          provide: EmailService,
-          useValue: emailServiceMock,
+          provide: EmailQueueService,
+          useValue: emailQueueServiceMock,
         },
         {
           provide: TermiiService,
