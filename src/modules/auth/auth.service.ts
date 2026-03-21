@@ -386,7 +386,7 @@ export class AuthService {
       userId: user.id,
     });
 
-    console.log(`[LOGIN_DEBUG] I just logged in: userId=${user.id} phone=${user.phone}`);
+    console.log(`[LOGIN_DEBUG] Who are you? I just logged in: userId=${user.id} phone=${user.phone}`);
 
     return {
       message: 'Login successful',
