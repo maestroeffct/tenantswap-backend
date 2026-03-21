@@ -28,6 +28,6 @@ import { NotificationService } from './notification.service';
     ReliabilityService,
     TermiiService,
   ],
-  exports: [MatchingService, MatchingQueueService],
+  exports: [MatchingService, MatchingQueueService, NotificationService],
 })
 export class MatchingModule {}

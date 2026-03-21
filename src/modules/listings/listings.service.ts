@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../common/prisma.service';
 import { EventsService } from '../events/events.service';
 import { MatchingService } from '../matching/matching.service';
+import { NotificationService } from '../matching/notification.service';
 import { CreateListingDto } from './dto/create-listing.dto';
 import { UpdateListingDto } from './dto/update-listing.dto';
 
@@ -15,6 +16,7 @@ export class ListingsService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly matchingService: MatchingService,
+    private readonly notificationService: NotificationService,
     private readonly eventsService: EventsService,
   ) {
     this.listingActiveTtlHours =
@@ -164,13 +166,82 @@ export class ListingsService {
     });
   }
 
+  private async notifyVacancyAlertRecipients(input: {
+    userId: string;
+    listingId: string;
+    vacancyAlertId: string;
+    apartmentType: string;
+    state: string;
+    city: string;
+    area: string | null;
+    features: string[];
+  }) {
+    const desiredLocationFilter = input.area
+      ? {
+          desiredState: input.state,
+          desiredCity: input.city,
+          desiredArea: input.area,
+        }
+      : {
+          desiredState: input.state,
+          desiredCity: input.city,
+        };
+
+    const currentLocationFilter = input.area
+      ? {
+          currentState: input.state,
+          currentCity: input.city,
+          currentArea: input.area,
+        }
+      : {
+          currentState: input.state,
+          currentCity: input.city,
+        };
+
+    const matchingListings = await this.prisma.swapListing.findMany({
+      where: {
+        status: 'ACTIVE',
+        userId: { not: input.userId },
+        OR: [desiredLocationFilter, currentLocationFilter],
+      },
+      select: {
+        userId: true,
+      },
+      distinct: ['userId'],
+    });
+
+    if (matchingListings.length === 0) {
+      return;
+    }
+
+    const locationLabel = input.area ?? input.city;
+    await this.notificationService.notifyMany(
+      matchingListings.map((listing) => ({
+        userId: listing.userId,
+        type: 'VACANCY_ALERT_SHARED',
+        title: `Possible vacancy in ${locationLabel}`,
+        message: `A tenant in ${locationLabel} just reported a possible ${input.apartmentType} vacancy.`,
+        payload: {
+          vacancyAlertId: input.vacancyAlertId,
+          listingId: input.listingId,
+          apartmentType: input.apartmentType,
+          state: input.state,
+          city: input.city,
+          area: input.area,
+          features: input.features,
+        },
+        channels: ['IN_APP'],
+      })),
+    );
+  }
+
   async createListing(userId: string, dto: CreateListingDto) {
     const currentAvailableOn = this.mapCurrentAvailableOn(
       dto.currentAvailable,
       dto.currentAvailableOn,
     );
 
-    const listing = await this.prisma.$transaction(async (tx) => {
+    const listingResult = await this.prisma.$transaction(async (tx) => {
       const createdListing = await tx.swapListing.create({
         data: {
           userId,
@@ -193,20 +264,50 @@ export class ListingsService {
         },
       });
 
+      const createdVacancyAlert = dto.vacancyAlert
+        ? await tx.vacancyAlert.create({
+            data: {
+              userId,
+              listingId: createdListing.id,
+              apartmentType: dto.vacancyAlert.apartmentType,
+              state: dto.vacancyAlert.state,
+              city: dto.vacancyAlert.city,
+              area: this.normalizeNullableString(dto.vacancyAlert.area),
+              features: dto.vacancyAlert.features,
+            },
+          })
+        : null;
+
       await tx.user.update({
         where: { id: userId },
         data: { onboardingComplete: true },
       });
 
-      return createdListing;
+      return {
+        listing: createdListing,
+        vacancyAlert: createdVacancyAlert,
+      };
     });
 
-    await this.refreshMatchesForListing(listing);
-    this.emitListingEvents(userId, listing.id, 'listing_created');
+    await this.refreshMatchesForListing(listingResult.listing);
+    this.emitListingEvents(userId, listingResult.listing.id, 'listing_created');
+
+    if (listingResult.vacancyAlert) {
+      await this.notifyVacancyAlertRecipients({
+        userId,
+        listingId: listingResult.listing.id,
+        vacancyAlertId: listingResult.vacancyAlert.id,
+        apartmentType: listingResult.vacancyAlert.apartmentType,
+        state: listingResult.vacancyAlert.state,
+        city: listingResult.vacancyAlert.city,
+        area: listingResult.vacancyAlert.area,
+        features: listingResult.vacancyAlert.features,
+      });
+    }
 
     return {
       message: 'Listing created successfully',
-      listing: await this.attachMatchesToListing(listing),
+      listing: await this.attachMatchesToListing(listingResult.listing),
     };
   }
 

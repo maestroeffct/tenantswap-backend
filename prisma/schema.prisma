@@ -33,7 +33,7 @@ model User {
   profilePhotoUrl             String?
   gender                      Gender?
   occupation                  String?
-  relationship_status      String?
+  relationship_status         String?
   allowIncomingCalls          Boolean            @default(false)
   canConnectLandlord          Boolean            @default(false)
   hasLandlordContact          Boolean            @default(false)
@@ -47,6 +47,7 @@ model User {
   createdAt                   DateTime           @default(now())
 
   listings            SwapListing[]
+  vacancyAlerts       VacancyAlert[]
   notifications       UserNotification[]
   interestsRequested  ListingInterest[]    @relation("UserRequestedInterests")
   paymentTransactions PaymentTransaction[]
@@ -80,7 +81,6 @@ model SwapListing {
   currentAvailable   Boolean
   currentAvailableOn DateTime?
 
-
   features String[]
 
   // Interest-based matching metadata.
@@ -100,11 +100,30 @@ model SwapListing {
   createdAt DateTime @default(now())
 
   user              User              @relation(fields: [userId], references: [id])
+  vacancyAlert      VacancyAlert?
   incomingInterests ListingInterest[] @relation("ListingIncomingInterests")
   outgoingInterests ListingInterest[] @relation("ListingOutgoingInterests")
 
   @@index([matchedInterestId])
   @@index([status, expiresAt])
+}
+
+model VacancyAlert {
+  id            String   @id @default(uuid())
+  userId        String
+  listingId     String   @unique
+  apartmentType String
+  state         String
+  city          String
+  area          String?
+  features      String[]
+  createdAt     DateTime @default(now())
+
+  user    User        @relation(fields: [userId], references: [id])
+  listing SwapListing @relation(fields: [listingId], references: [id])
+
+  @@index([userId, createdAt])
+  @@index([state, city, area, createdAt])
 }
 
 enum UserRole {
