@@ -18,7 +18,7 @@ export function configureApp(app: INestApplication) {
 
   app.enableCors({
     origin: '*',
-    credentials: true,
+    credentials: false,
   });
 
   return app;
