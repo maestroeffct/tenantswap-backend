@@ -44,6 +44,10 @@ Required/runtime variables currently used by the backend:
 - `PHONE_OTP_RESEND_COOLDOWN_SECONDS`
 - `NOTIFICATION_EMAIL_ENABLED`
 - `NOTIFICATION_SMS_ENABLED`
+- `NOTIFICATION_CLEANUP_ENABLED`
+- `NOTIFICATION_CLEANUP_SWEEP_MS`
+- `NOTIFICATION_RETENTION_READ_HOURS`
+- `NOTIFICATION_RETENTION_UNREAD_HOURS`
 - `AUTO_SEARCH_SWEEP_ENABLED`
 - `AUTO_SEARCH_SWEEP_LIMIT`
 - `CHAIN_ACCEPT_TTL_HOURS`
@@ -83,6 +87,7 @@ Required/runtime variables currently used by the backend:
 - Verification emails are sent via SMTP (HTML + text); if SMTP is unavailable, backend logs a fallback verification link.
 - Phone verification OTP uses Termii (`/auth/phone/send-otp`, `/auth/phone/resend-otp`, `/auth/phone/verify-otp`).
 - Matching notifications can now fan out to in-app + email + SMS for request/approval/decline and auto-search match discovery.
+- Notification retention cleanup keeps read notifications for 12 hours by default and unread notifications for 7 days, then prunes them automatically.
 - Authenticated clients can open an SSE stream at `GET /events/stream` for immediate `matches`, `interests`, and notification refresh triggers.
 
 Global response envelope (success and errors):

@@ -294,6 +294,22 @@ const envSchema = z
       'NOTIFICATION_SMS_ENABLED',
       true,
     ),
+    NOTIFICATION_CLEANUP_ENABLED: booleanWithDefault(
+      'NOTIFICATION_CLEANUP_ENABLED',
+      true,
+    ),
+    NOTIFICATION_CLEANUP_SWEEP_MS: positiveIntWithDefault(
+      'NOTIFICATION_CLEANUP_SWEEP_MS',
+      3_600_000,
+    ),
+    NOTIFICATION_RETENTION_READ_HOURS: positiveIntWithDefault(
+      'NOTIFICATION_RETENTION_READ_HOURS',
+      12,
+    ),
+    NOTIFICATION_RETENTION_UNREAD_HOURS: positiveIntWithDefault(
+      'NOTIFICATION_RETENTION_UNREAD_HOURS',
+      168,
+    ),
     AUTO_SEARCH_SWEEP_ENABLED: booleanWithDefault(
       'AUTO_SEARCH_SWEEP_ENABLED',
       true,

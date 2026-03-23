@@ -42,6 +42,41 @@ export class NotificationsService {
     };
   }
 
+
+  async cleanupExpiredNotifications(input: {
+    readRetentionHours: number;
+    unreadRetentionHours: number;
+  }) {
+    const now = Date.now();
+    const readCutoff = new Date(now - input.readRetentionHours * 60 * 60 * 1000);
+    const unreadCutoff = new Date(
+      now - input.unreadRetentionHours * 60 * 60 * 1000,
+    );
+
+    const [readResult, unreadResult] = await Promise.all([
+      this.prisma.userNotification.deleteMany({
+        where: {
+          readAt: {
+            lt: readCutoff,
+          },
+        },
+      }),
+      this.prisma.userNotification.deleteMany({
+        where: {
+          readAt: null,
+          createdAt: {
+            lt: unreadCutoff,
+          },
+        },
+      }),
+    ]);
+
+    return {
+      deletedReadCount: readResult.count,
+      deletedUnreadCount: unreadResult.count,
+    };
+  }
+
   async markAsRead(userId: string, notificationId: string) {
     const notification = await this.prisma.userNotification.updateMany({
       where: {
