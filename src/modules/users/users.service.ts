@@ -48,6 +48,7 @@ export class UsersService {
     const listings = await this.prisma.swapListing.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' },
+      include: { vacancyAlert: true },
     });
 
     return Promise.all(
