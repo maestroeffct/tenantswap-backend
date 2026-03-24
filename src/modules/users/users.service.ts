@@ -74,6 +74,9 @@ export class UsersService {
               id: {
                 in: targetListingIds,
               },
+              status: 'ACTIVE',
+              currentAvailable: true,
+              OR: [{ expiresAt: null }, { expiresAt: { gte: new Date() } }],
             },
             select: {
               id: true,
