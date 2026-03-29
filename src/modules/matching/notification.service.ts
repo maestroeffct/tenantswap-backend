@@ -5,6 +5,7 @@ import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma.service';
 import { EmailQueueService } from '../../common/services/email-queue.service';
 import { TermiiService } from '../../common/services/termii.service';
+import { PushService } from '../../common/services/push.service';
 import { EventsService } from '../events/events.service';
 
 export type NotificationChannel = 'IN_APP' | 'EMAIL' | 'SMS';
@@ -29,6 +30,7 @@ export class NotificationService {
     private readonly prisma: PrismaService,
     private readonly emailQueueService: EmailQueueService,
     private readonly termiiService: TermiiService,
+    private readonly pushService: PushService,
     private readonly config: ConfigService,
     private readonly eventsService: EventsService,
   ) {
@@ -111,6 +113,7 @@ export class NotificationService {
         id: true,
         email: true,
         phone: true,
+        pushToken: true,
       },
     });
 
@@ -156,6 +159,19 @@ export class NotificationService {
 
     if (deliveryTasks.length > 0) {
       await Promise.allSettled(deliveryTasks);
+    }
+
+    // Push notifications
+    for (const notification of normalized) {
+      const user = userById.get(notification.userId);
+      if (user?.pushToken) {
+        void this.pushService.sendPush({
+          token: user.pushToken,
+          title: notification.title,
+          body: notification.message,
+          data: { type: notification.type, userId: notification.userId },
+        });
+      }
     }
   }
 

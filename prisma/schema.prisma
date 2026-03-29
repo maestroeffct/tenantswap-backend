@@ -44,6 +44,7 @@ model User {
   phoneVerificationExpiresAt  DateTime?
   phoneVerificationAttempts   Int                @default(0)
   phoneVerificationLastSentAt DateTime?
+  pushToken                   String?
   createdAt                   DateTime           @default(now())
 
   listings            SwapListing[]

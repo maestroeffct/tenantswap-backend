@@ -314,6 +314,14 @@ export class UsersService {
     }
   }
 
+  async savePushToken(userId: string, token: string) {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { pushToken: token },
+    });
+    return { message: 'Push token saved' };
+  }
+
   async changePassword(userId: string, dto: ChangePasswordDto) {
     if (dto.currentPassword === dto.newPassword) {
       throw new BadRequestException(

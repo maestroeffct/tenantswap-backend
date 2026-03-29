@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Patch, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Patch, Post, UseGuards } from '@nestjs/common';
 
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { CurrentUserPayload } from '../../common/decorators/current-user.decorator';
@@ -43,5 +43,14 @@ export class UsersController {
   @Get('me/reliability')
   getMyReliability(@CurrentUser() user: CurrentUserPayload) {
     return this.reliabilityService.getStatus(user.id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('me/push-token')
+  savePushToken(
+    @CurrentUser() user: CurrentUserPayload,
+    @Body() body: { token: string },
+  ) {
+    return this.usersService.savePushToken(user.id, body.token);
   }
 }
