@@ -66,24 +66,13 @@ export const VerifyEmail = ({
 
               {/* Logo */}
               <Section className="text-center mb-6">
-                <div
-                  style={{
-                    width: 64,
-                    height: 64,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    margin: '0 auto',
-                  }}
-                >
-                  <Img
-                    src={`${appUrl}/favicon.ico`}
-                    alt="TenantSwap"
-                    width={70}
-                    height="auto"
-                    className="mx-auto"
-                  />
-                </div>
+                <Img
+                  src={`${appUrl}/assets/TenantSwap Logo Combination.png`}
+                  alt="TenantSwap"
+                  width={160}
+                  height="auto"
+                  className="mx-auto"
+                />
               </Section>
 
               <Heading className="email-heading text-2xl font-bold text-gray-900 text-center mt-0 mb-2">

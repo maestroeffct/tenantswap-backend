@@ -220,6 +220,9 @@ const template = React.createElement(VerifyEmail, {
     const useSmtp = !!(this.transporter && this.fromAddress);
 
     if (!useMailgunApi && !useSmtp) {
+      this.logger.warn(
+        `[EMAIL_SKIPPED] type=${input.type} email=${input.to} reason=no_transport_configured`,
+      );
       return {
         delivered: false,
         provider: 'log-only',
@@ -235,6 +238,9 @@ const template = React.createElement(VerifyEmail, {
         let messageId: string;
 
         if (useMailgunApi) {
+          this.logger.log(
+            `[EMAIL_ATTEMPT] type=${input.type} email=${input.to} attempt=${attempt} provider=mailgun-api`,
+          );
           messageId = await this.sendViaMailgunApi({
             from: this.fromAddress!,
             to: input.to,
@@ -243,6 +249,9 @@ const template = React.createElement(VerifyEmail, {
             html: input.html,
           });
         } else {
+          this.logger.log(
+            `[EMAIL_ATTEMPT] type=${input.type} email=${input.to} attempt=${attempt} provider=smtp`,
+          );
           const response = await this.transporter!.sendMail({
             from: this.fromAddress,
             to: input.to,
