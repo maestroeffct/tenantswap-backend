@@ -5,6 +5,8 @@ import VerifyEmail from 'emails/VerifyEmail';
 import MatchEmail from 'emails/MatchEmail';
 import { render } from '@react-email/components';
 import React from 'react';
+import * as https from 'https';
+import * as querystring from 'querystring';
 
 export type VerificationEmailInput = {
   fullName: string;
@@ -37,6 +39,8 @@ export class EmailService {
   private readonly fromAddress: string | null;
   private readonly retryMaxAttempts: number;
   private readonly retryDelayMs: number;
+  private readonly mailgunApiKey: string | null;
+  private readonly mailgunDomain: string | null;
 
   constructor(private readonly config: ConfigService) {
     const smtpHost = this.config.get<string>('SMTP_HOST');
@@ -51,7 +55,15 @@ export class EmailService {
     this.retryDelayMs =
       this.config.get<number>('EMAIL_SEND_RETRY_DELAY_MS') ?? 750;
 
-    if (smtpHost && smtpUser && smtpPass && this.fromAddress) {
+    this.mailgunApiKey = this.config.get<string>('MAILGUN_API_KEY') ?? null;
+    this.mailgunDomain = this.config.get<string>('MAILGUN_DOMAIN') ?? null;
+
+    if (this.mailgunApiKey && this.mailgunDomain) {
+      this.transporter = null;
+      this.logger.log(
+        `Email transport enabled via Mailgun HTTP API domain=${this.mailgunDomain}`,
+      );
+    } else if (smtpHost && smtpUser && smtpPass && this.fromAddress) {
       this.transporter = nodemailer.createTransport({
         host: smtpHost,
         port: smtpPort,
@@ -71,6 +83,56 @@ export class EmailService {
         'Email transport is not fully configured. Falling back to log-only verification links.',
       );
     }
+  }
+
+  private sendViaMailgunApi(input: {
+    to: string;
+    from: string;
+    subject: string;
+    text: string;
+    html: string;
+  }): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const postData = querystring.stringify({
+        from: input.from,
+        to: input.to,
+        subject: input.subject,
+        text: input.text,
+        html: input.html,
+      });
+
+      const options: https.RequestOptions = {
+        hostname: 'api.mailgun.net',
+        path: `/v3/${this.mailgunDomain}/messages`,
+        method: 'POST',
+        auth: `api:${this.mailgunApiKey}`,
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Content-Length': Buffer.byteLength(postData),
+        },
+      };
+
+      const req = https.request(options, (res) => {
+        let body = '';
+        res.on('data', (chunk: Buffer) => { body += chunk.toString(); });
+        res.on('end', () => {
+          if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+            try {
+              const parsed = JSON.parse(body) as { id?: string };
+              resolve(parsed.id ?? 'mailgun-ok');
+            } catch {
+              resolve('mailgun-ok');
+            }
+          } else {
+            reject(new Error(`Mailgun API error ${res.statusCode}: ${body}`));
+          }
+        });
+      });
+
+      req.on('error', reject);
+      req.write(postData);
+      req.end();
+    });
   }
 
   async sendVerificationEmail(
@@ -154,7 +216,10 @@ const template = React.createElement(VerifyEmail, {
     text: string;
     html: string;
   }): Promise<EmailDispatchResult> {
-    if (!this.transporter || !this.fromAddress) {
+    const useMailgunApi = !!(this.mailgunApiKey && this.mailgunDomain && this.fromAddress);
+    const useSmtp = !!(this.transporter && this.fromAddress);
+
+    if (!useMailgunApi && !useSmtp) {
       return {
         delivered: false,
         provider: 'log-only',
@@ -167,23 +232,36 @@ const template = React.createElement(VerifyEmail, {
 
     for (let attempt = 1; attempt <= this.retryMaxAttempts; attempt += 1) {
       try {
-        const response = await this.transporter.sendMail({
-          from: this.fromAddress,
-          to: input.to,
-          subject: input.subject,
-          text: input.text,
-          html: input.html,
-        });
+        let messageId: string;
+
+        if (useMailgunApi) {
+          messageId = await this.sendViaMailgunApi({
+            from: this.fromAddress!,
+            to: input.to,
+            subject: input.subject,
+            text: input.text,
+            html: input.html,
+          });
+        } else {
+          const response = await this.transporter!.sendMail({
+            from: this.fromAddress,
+            to: input.to,
+            subject: input.subject,
+            text: input.text,
+            html: input.html,
+          });
+          messageId = response.messageId as string;
+        }
 
         this.logger.log(
-          `[EMAIL_SENT] type=${input.type} email=${input.to} attempt=${attempt} messageId=${response.messageId}`,
+          `[EMAIL_SENT] type=${input.type} email=${input.to} attempt=${attempt} messageId=${messageId} provider=${useMailgunApi ? 'mailgun-api' : 'smtp'}`,
         );
 
         return {
           delivered: true,
           provider: 'smtp',
           attempts: attempt,
-          messageId: response.messageId,
+          messageId,
         };
       } catch (error: unknown) {
         lastError = error instanceof Error ? error.message : 'unknown_error';
