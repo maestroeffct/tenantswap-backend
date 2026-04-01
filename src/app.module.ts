@@ -17,6 +17,7 @@ import { AdminModule } from './modules/admin/admin.module';
 import { BillingModule } from './modules/billing/billing.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { EventsModule } from './modules/events/events.module';
+import { VacancyModule } from './modules/vacancy/vacancy.module';
 import { validateEnv } from './config/env.validation';
 import { GoogleStrategy } from './common/strategies/google.strategy';
 import { EmailModule } from './common/email.module';
@@ -53,6 +54,7 @@ import { EmailModule } from './common/email.module';
     BillingModule,
     NotificationsModule,
     EventsModule,
+    VacancyModule,
   ],
   providers: [
     {

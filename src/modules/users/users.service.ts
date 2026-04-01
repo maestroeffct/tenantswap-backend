@@ -48,7 +48,6 @@ export class UsersService {
     const listings = await this.prisma.swapListing.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' },
-      include: { vacancyAlert: true },
     });
 
     return Promise.all(
@@ -416,5 +415,13 @@ export class UsersService {
 
   private normalizeEmail(email: string): string {
     return email.trim().toLowerCase();
+  }
+
+  async setProfilePhotoUrl(userId: string, url: string) {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { profilePhotoUrl: url },
+    });
+    return { profilePhotoUrl: url };
   }
 }

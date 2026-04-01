@@ -6,27 +6,7 @@ import {
   IsOptional,
   IsString,
   ValidateIf,
-  ValidateNested,
 } from 'class-validator';
-import { Type } from 'class-transformer';
-
-class VacancyAlertDto {
-  @IsString()
-  apartmentType: string;
-
-  @IsString()
-  state: string;
-
-  @IsString()
-  city: string;
-
-  @IsOptional()
-  @IsString()
-  area?: string | null;
-
-  @IsArray()
-  features: string[];
-}
 
 export class UpdateListingDto {
   @IsOptional()
@@ -85,9 +65,4 @@ export class UpdateListingDto {
   @IsOptional()
   @IsArray()
   features?: string[];
-
-  @IsOptional()
-  @ValidateNested()
-  @Type(() => VacancyAlertDto)
-  vacancyAlert?: VacancyAlertDto | null;
 }

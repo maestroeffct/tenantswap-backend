@@ -1,9 +1,12 @@
-import { Body, Controller, Get, Patch, Post, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Patch, Post, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { CurrentUserPayload } from '../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt.guard';
 import { ReliabilityService } from '../../common/services/reliability.service';
+import { UploadService } from '../../common/services/upload.service';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UsersService } from './users.service';
@@ -13,6 +16,7 @@ export class UsersController {
   constructor(
     private readonly usersService: UsersService,
     private readonly reliabilityService: ReliabilityService,
+    private readonly uploadService: UploadService,
   ) {}
 
   @UseGuards(JwtAuthGuard)
@@ -43,6 +47,30 @@ export class UsersController {
   @Get('me/reliability')
   getMyReliability(@CurrentUser() user: CurrentUserPayload) {
     return this.reliabilityService.getStatus(user.id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('me/profile-photo')
+  @UseInterceptors(
+    FileInterceptor('photo', {
+      storage: memoryStorage(),
+      limits: { fileSize: 5 * 1024 * 1024 },
+      fileFilter: (_req, file, cb) => {
+        if (/^image\/(jpeg|png|webp)$/.test(file.mimetype)) {
+          cb(null, true);
+        } else {
+          cb(new BadRequestException('Only JPEG, PNG, or WebP images are allowed'), false);
+        }
+      },
+    }),
+  )
+  async uploadProfilePhoto(
+    @CurrentUser() user: CurrentUserPayload,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!file) throw new BadRequestException('No image provided');
+    const url = await this.uploadService.uploadProfilePhoto(file.buffer, user.id);
+    return this.usersService.setProfilePhotoUrl(user.id, url);
   }
 
   @UseGuards(JwtAuthGuard)

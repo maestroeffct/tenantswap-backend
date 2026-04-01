@@ -1,0 +1,163 @@
+import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
+
+import { PrismaService } from '../../common/prisma.service';
+import { MatchingService } from '../matching/matching.service';
+import { NotificationService } from '../matching/notification.service';
+import { CreateVacancyDto } from './dto/create-vacancy.dto';
+
+@Injectable()
+export class VacancyService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificationService: NotificationService,
+    private readonly matchingService: MatchingService,
+  ) {}
+
+  private normalizeNullableString(value?: string | null) {
+    if (typeof value !== 'string') return null;
+    const trimmed = value.trim();
+    return trimmed ? trimmed : null;
+  }
+
+  async createVacancy(userId: string, dto: CreateVacancyDto) {
+    const vacancy = await this.prisma.vacancyAlert.create({
+      data: {
+        userId,
+        apartmentType: dto.apartmentType,
+        state: dto.state,
+        city: dto.city,
+        area: this.normalizeNullableString(dto.area),
+        features: dto.features,
+      },
+    });
+
+    // Notify users with active listings in matching location
+    await this.notifyRecipients({ userId, vacancy });
+
+    return vacancy;
+  }
+
+  async getMyVacancies(userId: string) {
+    return this.prisma.vacancyAlert.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async deleteVacancy(userId: string, vacancyId: string) {
+    const vacancy = await this.prisma.vacancyAlert.findUnique({
+      where: { id: vacancyId },
+    });
+
+    if (!vacancy) {
+      throw new BadRequestException('Vacancy alert not found');
+    }
+
+    if (vacancy.userId !== userId) {
+      throw new ForbiddenException('Not your vacancy alert');
+    }
+
+    await this.prisma.vacancyAlert.delete({ where: { id: vacancyId } });
+    return { success: true };
+  }
+
+  async getPublicVacancy(vacancyId: string) {
+    const vacancy = await this.prisma.vacancyAlert.findUnique({
+      where: { id: vacancyId },
+      select: {
+        id: true,
+        apartmentType: true,
+        state: true,
+        city: true,
+        area: true,
+        features: true,
+        createdAt: true,
+        user: {
+          select: {
+            id: true,
+            fullName: true,
+            profilePhotoUrl: true,
+          },
+        },
+      },
+    });
+
+    return vacancy ?? null;
+  }
+
+  async recordClick(vacancyId: string) {
+    await this.prisma.vacancyAlert.updateMany({
+      where: { id: vacancyId },
+      data: { clickCount: { increment: 1 } },
+    });
+  }
+
+  async recordShare(vacancyId: string) {
+    await this.prisma.vacancyAlert.updateMany({
+      where: { id: vacancyId },
+      data: { shareCount: { increment: 1 } },
+    });
+  }
+
+  async connectViaVacancy(viewerUserId: string, vacancyId: string) {
+    const vacancy = await this.prisma.vacancyAlert.findUnique({
+      where: { id: vacancyId },
+      select: { userId: true },
+    });
+
+    if (!vacancy) {
+      throw new BadRequestException('Vacancy not found');
+    }
+
+    if (vacancy.userId === viewerUserId) {
+      throw new BadRequestException('You cannot connect to your own vacancy');
+    }
+
+    // Find owner's active listing (target)
+    const ownerListing = await this.prisma.swapListing.findFirst({
+      where: { userId: vacancy.userId, status: 'ACTIVE' },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true },
+    });
+
+    if (!ownerListing) {
+      throw new BadRequestException('This user no longer has an active listing');
+    }
+
+    // Delegate to the full requestInterest flow — handles upsert, SSE, notifications to both parties
+    return this.matchingService.requestInterest(ownerListing.id, viewerUserId);
+  }
+
+  private async notifyRecipients(input: {
+    userId: string;
+    vacancy: { id: string; apartmentType: string; state: string; city: string; area: string | null; features: string[] };
+  }) {
+    const locationFilter = input.vacancy.area
+      ? { desiredState: input.vacancy.state, desiredCity: input.vacancy.city, desiredArea: input.vacancy.area }
+      : { desiredState: input.vacancy.state, desiredCity: input.vacancy.city };
+
+    const currentFilter = input.vacancy.area
+      ? { currentState: input.vacancy.state, currentCity: input.vacancy.city, currentArea: input.vacancy.area }
+      : { currentState: input.vacancy.state, currentCity: input.vacancy.city };
+
+    const matchingListings = await this.prisma.swapListing.findMany({
+      where: { status: 'ACTIVE', userId: { not: input.userId }, OR: [locationFilter, currentFilter] },
+      select: { userId: true },
+      distinct: ['userId'],
+    });
+
+    if (matchingListings.length === 0) return;
+
+    const locationLabel = input.vacancy.area ?? input.vacancy.city;
+    await this.notificationService.notifyMany(
+      matchingListings.map((l) => ({
+        userId: l.userId,
+        type: 'VACANCY_ALERT_SHARED',
+        title: `Possible vacancy in ${locationLabel}`,
+        message: `A tenant in ${locationLabel} just reported a possible ${input.vacancy.apartmentType} vacancy.`,
+        payload: { vacancyAlertId: input.vacancy.id, apartmentType: input.vacancy.apartmentType, state: input.vacancy.state, city: input.vacancy.city, area: input.vacancy.area, features: input.vacancy.features },
+        channels: ['IN_APP'],
+      })),
+    );
+  }
+}

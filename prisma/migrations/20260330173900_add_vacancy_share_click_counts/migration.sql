@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "VacancyAlert" ADD COLUMN     "clickCount" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "shareCount" INTEGER NOT NULL DEFAULT 0;

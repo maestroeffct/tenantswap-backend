@@ -101,7 +101,6 @@ model SwapListing {
   createdAt DateTime @default(now())
 
   user              User              @relation(fields: [userId], references: [id])
-  vacancyAlert      VacancyAlert?
   incomingInterests ListingInterest[] @relation("ListingIncomingInterests")
   outgoingInterests ListingInterest[] @relation("ListingOutgoingInterests")
 
@@ -112,16 +111,16 @@ model SwapListing {
 model VacancyAlert {
   id            String   @id @default(uuid())
   userId        String
-  listingId     String   @unique
   apartmentType String
   state         String
   city          String
   area          String?
   features      String[]
+  shareCount    Int      @default(0)
+  clickCount    Int      @default(0)
   createdAt     DateTime @default(now())
 
-  user    User        @relation(fields: [userId], references: [id])
-  listing SwapListing @relation(fields: [listingId], references: [id])
+  user User @relation(fields: [userId], references: [id])
 
   @@index([userId, createdAt])
   @@index([state, city, area, createdAt])
