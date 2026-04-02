@@ -167,6 +167,10 @@ export class UsersService {
     const nextAllowIncomingCalls = dto.allowIncomingCalls;
     const nextCanConnectLandlord = dto.canConnectLandlord;
     const nextHasLandlordContact = dto.hasLandlordContact;
+    const nextWorkplaceName = dto.workplaceName !== undefined ? (dto.workplaceName?.trim() || null) : undefined;
+    const nextWorkplaceArea = dto.workplaceArea !== undefined ? (dto.workplaceArea?.trim() || null) : undefined;
+    const nextWorkplaceCity = dto.workplaceCity !== undefined ? (dto.workplaceCity?.trim() || null) : undefined;
+    const nextWorkplaceState = dto.workplaceState !== undefined ? (dto.workplaceState?.trim() || null) : undefined;
 
     const changesEmail =
       nextEmail !== undefined && nextEmail !== (user.email ?? null);
@@ -243,6 +247,11 @@ export class UsersService {
       data.hasLandlordContact = nextHasLandlordContact;
     }
 
+    if (nextWorkplaceName !== undefined) data.workplaceName = nextWorkplaceName;
+    if (nextWorkplaceArea !== undefined) data.workplaceArea = nextWorkplaceArea;
+    if (nextWorkplaceCity !== undefined) data.workplaceCity = nextWorkplaceCity;
+    if (nextWorkplaceState !== undefined) data.workplaceState = nextWorkplaceState;
+
     let verificationToken: string | undefined;
     if (changesEmail && nextEmail) {
       const tokenArtifacts = this.generateEmailVerificationArtifacts();
@@ -288,6 +297,10 @@ export class UsersService {
           hasLandlordContact: true,
           onboardingComplete: true,
           phoneVerifiedAt: true,
+          workplaceName: true,
+          workplaceArea: true,
+          workplaceCity: true,
+          workplaceState: true,
           createdAt: true,
         },
       });
@@ -378,6 +391,10 @@ export class UsersService {
         hasLandlordContact: true,
         onboardingComplete: true,
         phoneVerifiedAt: true,
+        workplaceName: true,
+        workplaceArea: true,
+        workplaceCity: true,
+        workplaceState: true,
         createdAt: true,
       },
     });

@@ -25,6 +25,7 @@ type Edge = {
   budgetScore: number;
   timelineScore: number;
   featureScore: number;
+  workplaceScore: number;
   reliabilityPenalty: number;
   reciprocityBonus: number;
   rankScore: number;
@@ -50,6 +51,8 @@ type ListingNode = {
   currentAvailableOn: Date | null;
   features: string[];
   reliabilityScore: number;
+  workplaceCity: string | null;
+  workplaceArea: string | null;
 };
 
 type Recommendation = {
@@ -72,6 +75,7 @@ type Recommendation = {
     budget: number;
     timeline: number;
     features: number;
+    workplaceProximity: number;
     reliabilityPenalty: number;
     reciprocityBonus: number;
   };
@@ -344,12 +348,41 @@ export class MatchingService {
     return Math.round((deficit / 100) * this.reliabilityRankPenaltyWeight);
   }
 
+  // Score B higher if B's current location is near A's workplace.
+  // A is the seeker; B is the listing being evaluated.
+  // Max 8 points: city match (5) + area match (3).
+  private computeWorkplaceProximityScore(a: ListingNode, b: ListingNode) {
+    if (!a.workplaceCity) return 0;
+
+    const wpCity = this.normalize(a.workplaceCity);
+    const bCity = this.normalize(b.currentCity);
+    if (wpCity !== bCity) return 0;
+
+    // City matched: 5 pts base
+    let score = 5;
+
+    if (a.workplaceArea && b.currentArea) {
+      const wpArea = this.normalize(a.workplaceArea);
+      const bArea = this.normalize(b.currentArea);
+      if (wpArea === bArea) {
+        score += 3;
+      } else {
+        const wpTokens = new Set(this.tokenizeLocation(a.workplaceArea));
+        const bTokens = this.tokenizeLocation(b.currentArea);
+        if (bTokens.some((t) => wpTokens.has(t))) score += 1;
+      }
+    }
+
+    return score;
+  }
+
   private computeScore(a: ListingNode, b: ListingNode) {
     const cityScore = this.computeLocationScore(a, b);
     const typeScore = this.computeTypeScore(a.desiredType, b.currentType);
     const budgetScore = this.computeBudgetScore(a.maxBudget, b.currentRent);
     const timelineScore = this.computeTimelineScore(a, b);
     const featureScore = this.computeFeatureScore(a, b);
+    const workplaceScore = this.computeWorkplaceProximityScore(a, b);
     const reliabilityPenalty = this.computeReliabilityPenalty(
       b.reliabilityScore,
     );
@@ -359,7 +392,8 @@ export class MatchingService {
       typeScore +
       budgetScore +
       timelineScore +
-      featureScore -
+      featureScore +
+      workplaceScore -
       reliabilityPenalty;
 
     return {
@@ -368,6 +402,7 @@ export class MatchingService {
       budgetScore,
       timelineScore,
       featureScore,
+      workplaceScore,
       reliabilityPenalty,
       reciprocityBonus: 0,
       rankScore: Math.max(0, Math.min(100, totalScore)),
@@ -545,6 +580,7 @@ export class MatchingService {
           budget: candidate.budgetScore,
           timeline: candidate.timelineScore,
           features: candidate.featureScore,
+          workplaceProximity: candidate.workplaceScore,
           reliabilityPenalty: candidate.reliabilityPenalty,
           reciprocityBonus: candidate.reciprocityBonus,
         },
@@ -1378,7 +1414,7 @@ export class MatchingService {
       },
     });
 
-    const reliabilityRows = await this.prisma.user.findMany({
+    const userRows = await this.prisma.user.findMany({
       where: {
         id: {
           in: [...new Set(listingRows.map((item) => item.userId))],
@@ -1387,17 +1423,24 @@ export class MatchingService {
       select: {
         id: true,
         reliabilityScore: true,
+        workplaceCity: true,
+        workplaceArea: true,
       },
     });
 
-    const reliabilityByUserId = new Map(
-      reliabilityRows.map((item) => [item.id, item.reliabilityScore] as const),
+    const userDataByUserId = new Map(
+      userRows.map((item) => [item.id, item] as const),
     );
 
-    const listings: ListingNode[] = listingRows.map((item) => ({
-      ...item,
-      reliabilityScore: reliabilityByUserId.get(item.userId) ?? 100,
-    }));
+    const listings: ListingNode[] = listingRows.map((item) => {
+      const userData = userDataByUserId.get(item.userId);
+      return {
+        ...item,
+        reliabilityScore: userData?.reliabilityScore ?? 100,
+        workplaceCity: userData?.workplaceCity ?? null,
+        workplaceArea: userData?.workplaceArea ?? null,
+      };
+    });
 
     await this.prisma.matchCandidate.deleteMany({
       where: {
@@ -1856,6 +1899,8 @@ export class MatchingService {
       currentAvailableOn: requesterListing.currentAvailableOn,
       features: requesterListing.features,
       reliabilityScore: 100,
+      workplaceCity: null,
+      workplaceArea: null,
     };
 
     const targetNode: ListingNode = {
@@ -1876,6 +1921,8 @@ export class MatchingService {
       currentAvailableOn: targetListing.currentAvailableOn,
       features: targetListing.features,
       reliabilityScore: 100,
+      workplaceCity: null,
+      workplaceArea: null,
     };
 
     if (!this.isEdgeCompatible(requesterNode, targetNode)) {

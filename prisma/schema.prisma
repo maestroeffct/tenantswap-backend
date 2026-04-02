@@ -45,6 +45,10 @@ model User {
   phoneVerificationAttempts   Int                @default(0)
   phoneVerificationLastSentAt DateTime?
   pushToken                   String?
+  workplaceName               String?
+  workplaceArea               String?
+  workplaceCity               String?
+  workplaceState              String?
   createdAt                   DateTime           @default(now())
 
   listings            SwapListing[]
