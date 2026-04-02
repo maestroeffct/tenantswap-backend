@@ -53,6 +53,8 @@ type ListingNode = {
   reliabilityScore: number;
   workplaceCity: string | null;
   workplaceArea: string | null;
+  listingType: 'SWAP' | 'SEEKING';
+  verificationStatus: string | null;
 };
 
 type Recommendation = {
@@ -412,6 +414,14 @@ export class MatchingService {
   }
 
   private isEdgeCompatible(a: ListingNode, b: ListingNode) {
+    // Seekers can never be on the B side — they have no apartment to offer
+    if (b.listingType === 'SEEKING') return false;
+
+    // If A is a seeker, they must be APPROVED to participate
+    if (a.listingType === 'SEEKING') {
+      return a.verificationStatus === 'APPROVED';
+    }
+
     const typeScore = this.computeTypeScore(a.desiredType, b.currentType);
     if (typeScore === 0) return false;
 
@@ -677,6 +687,12 @@ export class MatchingService {
         status: 'ACTIVE',
         autoSearchEnabled: true,
         OR: [{ expiresAt: null }, { expiresAt: { gte: now } }],
+        NOT: {
+          AND: [
+            { listingType: 'SEEKING' },
+            { verificationStatus: 'PENDING' },
+          ],
+        },
       },
       orderBy: { createdAt: 'asc' },
       take: this.autoSearchSweepLimit,
@@ -1391,8 +1407,23 @@ export class MatchingService {
     const listingRows = await this.prisma.swapListing.findMany({
       where: {
         status: 'ACTIVE',
-        currentAvailable: true,
         OR: [{ expiresAt: null }, { expiresAt: { gte: now } }],
+        // Exclude SEEKING listings that are still pending verification
+        NOT: {
+          AND: [
+            { listingType: 'SEEKING' },
+            { verificationStatus: 'PENDING' },
+          ],
+        },
+        // SWAP listings must have currentAvailable; SEEKING listings are exempt
+        AND: [
+          {
+            OR: [
+              { listingType: 'SEEKING' },
+              { currentAvailable: true },
+            ],
+          },
+        ],
       },
       select: {
         id: true,
@@ -1411,6 +1442,8 @@ export class MatchingService {
         currentAvailable: true,
         currentAvailableOn: true,
         features: true,
+        listingType: true,
+        verificationStatus: true,
       },
     });
 
@@ -1439,6 +1472,8 @@ export class MatchingService {
         reliabilityScore: userData?.reliabilityScore ?? 100,
         workplaceCity: userData?.workplaceCity ?? null,
         workplaceArea: userData?.workplaceArea ?? null,
+        listingType: item.listingType as 'SWAP' | 'SEEKING',
+        verificationStatus: item.verificationStatus as string | null,
       };
     });
 
@@ -1901,6 +1936,8 @@ export class MatchingService {
       reliabilityScore: 100,
       workplaceCity: null,
       workplaceArea: null,
+      listingType: requesterListing.listingType as 'SWAP' | 'SEEKING',
+      verificationStatus: requesterListing.verificationStatus as string | null,
     };
 
     const targetNode: ListingNode = {
@@ -1923,6 +1960,8 @@ export class MatchingService {
       reliabilityScore: 100,
       workplaceCity: null,
       workplaceArea: null,
+      listingType: targetListing.listingType as 'SWAP' | 'SEEKING',
+      verificationStatus: targetListing.verificationStatus as string | null,
     };
 
     if (!this.isEdgeCompatible(requesterNode, targetNode)) {

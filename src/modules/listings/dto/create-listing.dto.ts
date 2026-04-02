@@ -2,6 +2,7 @@ import {
   IsArray,
   IsBoolean,
   IsDateString,
+  IsEnum,
   IsInt,
   IsOptional,
   IsString,
@@ -9,6 +10,14 @@ import {
 } from 'class-validator';
 
 export class CreateListingDto {
+  @IsOptional()
+  @IsEnum(['SWAP', 'SEEKING'])
+  listingType?: 'SWAP' | 'SEEKING';
+
+  @IsOptional()
+  @IsEnum(['NYSC', 'WORK', 'SCHOOL', 'FAMILY_HOME', 'OTHER'])
+  seekerCategory?: 'NYSC' | 'WORK' | 'SCHOOL' | 'FAMILY_HOME' | 'OTHER';
+
   @IsString()
   desiredType: string;
 
@@ -28,29 +37,35 @@ export class CreateListingDto {
   @IsString()
   timeline: string;
 
+  @ValidateIf((o) => o.listingType !== 'SEEKING')
   @IsString()
-  currentType: string;
+  currentType?: string;
 
+  @ValidateIf((o) => o.listingType !== 'SEEKING')
   @IsString()
-  currentState: string;
+  currentState?: string;
 
+  @ValidateIf((o) => o.listingType !== 'SEEKING')
   @IsString()
-  currentCity: string;
+  currentCity?: string;
 
   @IsOptional()
   @IsString()
   currentArea?: string | null;
 
+  @ValidateIf((o) => o.listingType !== 'SEEKING')
   @IsInt()
-  currentRent: number;
+  currentRent?: number;
 
+  @ValidateIf((o) => o.listingType !== 'SEEKING')
   @IsBoolean()
-  currentAvailable: boolean;
+  currentAvailable?: boolean;
 
-  @ValidateIf((object) => object.currentAvailable !== false)
+  @ValidateIf((o) => o.listingType !== 'SEEKING' && o.currentAvailable !== false)
   @IsDateString()
   currentAvailableOn?: string | null;
 
+  @ValidateIf((o) => o.listingType !== 'SEEKING')
   @IsArray()
-  features: string[];
+  features?: string[];
 }

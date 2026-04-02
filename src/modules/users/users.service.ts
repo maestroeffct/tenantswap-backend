@@ -441,4 +441,26 @@ export class UsersService {
     });
     return { profilePhotoUrl: url };
   }
+
+  async submitNin(userId: string, nin: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { ninVerifiedAt: true },
+    });
+
+    if (!user) {
+      throw new BadRequestException('User not found');
+    }
+
+    if (user.ninVerifiedAt) {
+      throw new BadRequestException('NIN already verified');
+    }
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { nin: nin.trim() },
+    });
+
+    return { message: 'NIN submitted successfully. Verification is pending.' };
+  }
 }

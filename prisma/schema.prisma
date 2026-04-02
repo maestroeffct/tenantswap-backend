@@ -49,6 +49,8 @@ model User {
   workplaceArea               String?
   workplaceCity               String?
   workplaceState              String?
+  nin                         String?
+  ninVerifiedAt               DateTime?
   createdAt                   DateTime           @default(now())
 
   listings            SwapListing[]
@@ -77,16 +79,23 @@ model SwapListing {
   maxBudget    Int
   timeline     String
 
-  // WHAT USER IS LEAVING
-  currentType        String
-  currentState       String
-  currentCity        String
+  // WHAT USER IS LEAVING (defaults allow SEEKING listings to omit these)
+  currentType        String   @default("")
+  currentState       String   @default("")
+  currentCity        String   @default("")
   currentArea        String?
-  currentRent        Int
-  currentAvailable   Boolean
+  currentRent        Int      @default(0)
+  currentAvailable   Boolean  @default(false)
   currentAvailableOn DateTime?
 
-  features String[]
+  features String[] @default([])
+
+  // Seeker / verification fields
+  listingType             ListingType        @default(SWAP)
+  seekerCategory          SeekerCategory?
+  verificationStatus      VerificationStatus?
+  verificationDocumentUrl String?
+  verificationNote        String?
 
   // Interest-based matching metadata.
   matchedInterestId String?
@@ -110,6 +119,7 @@ model SwapListing {
 
   @@index([matchedInterestId])
   @@index([status, expiresAt])
+  @@index([listingType, verificationStatus, createdAt])
 }
 
 model VacancyAlert {
@@ -152,6 +162,26 @@ enum ListingStatus {
   ACTIVE
   MATCHED
   CLOSED
+}
+
+enum ListingType {
+  SWAP
+  SEEKING
+}
+
+enum SeekerCategory {
+  NYSC
+  WORK
+  SCHOOL
+  FAMILY_HOME
+  OTHER
+}
+
+enum VerificationStatus {
+  NOT_REQUIRED
+  PENDING
+  APPROVED
+  REJECTED
 }
 
 enum ListingCloseReason {

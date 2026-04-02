@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Patch, Post, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Patch, Post, UploadedFile, UseGuards, UseInterceptors, HttpCode, HttpStatus } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 
@@ -9,6 +9,7 @@ import { ReliabilityService } from '../../common/services/reliability.service';
 import { UploadService } from '../../common/services/upload.service';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import { SubmitNinDto } from './dto/submit-nin.dto';
 import { UsersService } from './users.service';
 
 @Controller('users')
@@ -80,5 +81,15 @@ export class UsersController {
     @Body() body: { token: string },
   ) {
     return this.usersService.savePushToken(user.id, body.token);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('me/nin')
+  @HttpCode(HttpStatus.OK)
+  submitNin(
+    @CurrentUser() user: CurrentUserPayload,
+    @Body() dto: SubmitNinDto,
+  ) {
+    return this.usersService.submitNin(user.id, dto.nin);
   }
 }

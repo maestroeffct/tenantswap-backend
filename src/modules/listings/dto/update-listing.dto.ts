@@ -2,6 +2,7 @@ import {
   IsArray,
   IsBoolean,
   IsDateString,
+  IsEnum,
   IsInt,
   IsOptional,
   IsString,
@@ -9,6 +10,14 @@ import {
 } from 'class-validator';
 
 export class UpdateListingDto {
+  @IsOptional()
+  @IsEnum(['SWAP', 'SEEKING'])
+  listingType?: 'SWAP' | 'SEEKING';
+
+  @IsOptional()
+  @IsEnum(['NYSC', 'WORK', 'SCHOOL', 'FAMILY_HOME', 'OTHER'])
+  seekerCategory?: 'NYSC' | 'WORK' | 'SCHOOL' | 'FAMILY_HOME' | 'OTHER';
+
   @IsOptional()
   @IsString()
   desiredType?: string;

@@ -12,6 +12,32 @@ export class UploadService {
     });
   }
 
+  async uploadVerificationDocument(buffer: Buffer, listingId: string): Promise<string> {
+    if (!buffer || buffer.length === 0) {
+      throw new BadRequestException('Empty file');
+    }
+
+    return new Promise((resolve, reject) => {
+      cloudinary.uploader
+        .upload_stream(
+          {
+            folder: 'tenantswap/verification-docs',
+            public_id: `listing_${listingId}`,
+            overwrite: true,
+            resource_type: 'auto',
+          },
+          (error, result) => {
+            if (error || !result) {
+              reject(new InternalServerErrorException('Document upload failed'));
+            } else {
+              resolve(result.secure_url);
+            }
+          },
+        )
+        .end(buffer);
+    });
+  }
+
   async uploadProfilePhoto(buffer: Buffer, userId: string): Promise<string> {
     if (!buffer || buffer.length === 0) {
       throw new BadRequestException('Empty file');

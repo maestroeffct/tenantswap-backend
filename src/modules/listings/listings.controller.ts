@@ -1,12 +1,17 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
   Param,
   Patch,
   Post,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { CurrentUserPayload } from '../../common/decorators/current-user.decorator';
@@ -53,5 +58,29 @@ export class ListingsController {
   @Get('me')
   getMine(@CurrentUser() user: CurrentUserPayload) {
     return this.listingsService.getMyListings(user.id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post(':listingId/verification-document')
+  @UseInterceptors(
+    FileInterceptor('document', {
+      storage: memoryStorage(),
+      limits: { fileSize: 10 * 1024 * 1024 },
+      fileFilter: (_req, file, cb) => {
+        if (/^(image\/(jpeg|png)|application\/pdf)$/.test(file.mimetype)) {
+          cb(null, true);
+        } else {
+          cb(new BadRequestException('Only JPEG, PNG, or PDF files are allowed'), false);
+        }
+      },
+    }),
+  )
+  async uploadVerificationDocument(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param('listingId') listingId: string,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!file) throw new BadRequestException('No document provided');
+    return this.listingsService.uploadVerificationDoc(user.id, listingId, file.buffer);
   }
 }

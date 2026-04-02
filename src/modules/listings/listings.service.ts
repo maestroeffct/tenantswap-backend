@@ -1,11 +1,17 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 import { PrismaService } from '../../common/prisma.service';
+import { UploadService } from '../../common/services/upload.service';
 import { EventsService } from '../events/events.service';
 import { MatchingService } from '../matching/matching.service';
+import { NotificationService } from '../matching/notification.service';
 import { CreateListingDto } from './dto/create-listing.dto';
 import { UpdateListingDto } from './dto/update-listing.dto';
+import { VerifyListingDto } from './dto/verify-listing.dto';
+
+// Document-based seeker categories that require admin review
+const DOCUMENT_SEEKER_CATEGORIES = ['NYSC', 'WORK', 'SCHOOL'] as const;
 
 @Injectable()
 export class ListingsService {
@@ -16,6 +22,8 @@ export class ListingsService {
     private readonly config: ConfigService,
     private readonly matchingService: MatchingService,
     private readonly eventsService: EventsService,
+    private readonly uploadService: UploadService,
+    private readonly notificationService: NotificationService,
   ) {
     this.listingActiveTtlHours =
       this.config.get<number>('LISTING_ACTIVE_TTL_HOURS') ?? 336;
@@ -46,7 +54,6 @@ export class ListingsService {
     return new Date(currentAvailableOn);
   }
 
-
   private emitListingEvents(userId: string, listingId: string, reason: string) {
     this.eventsService.emitToUser(userId, 'matches.updated', {
       listingId,
@@ -75,10 +82,9 @@ export class ListingsService {
         ? []
         : await this.prisma.swapListing.findMany({
             where: {
-              id: {
-                in: targetListingIds,
-              },
+              id: { in: targetListingIds },
               status: 'ACTIVE',
+              listingType: 'SWAP',       // seekers can never be a match target
               currentAvailable: true,
               OR: [{ expiresAt: null }, { expiresAt: { gte: new Date() } }],
             },
@@ -147,10 +153,24 @@ export class ListingsService {
   private async refreshMatchesForListing(listing: {
     id: string;
     status: string;
+    listingType?: string;
     currentAvailable: boolean;
     userId?: string;
   }) {
-    if (listing.status !== 'ACTIVE' || !listing.currentAvailable) {
+    if (listing.status !== 'ACTIVE') {
+      await this.prisma.matchCandidate.deleteMany({
+        where: {
+          OR: [{ fromListingId: listing.id }, { toListingId: listing.id }],
+        },
+      });
+      if (listing.userId) {
+        this.emitListingEvents(listing.userId, listing.id, 'listing_unavailable');
+      }
+      return null;
+    }
+
+    // For SWAP listings, also require currentAvailable
+    if (listing.listingType !== 'SEEKING' && !listing.currentAvailable) {
       await this.prisma.matchCandidate.deleteMany({
         where: {
           OR: [{ fromListingId: listing.id }, { toListingId: listing.id }],
@@ -168,31 +188,50 @@ export class ListingsService {
   }
 
   async createListing(userId: string, dto: CreateListingDto) {
-    const currentAvailableOn = this.mapCurrentAvailableOn(
-      dto.currentAvailable,
-      dto.currentAvailableOn,
-    );
+    const listingType = dto.listingType ?? 'SWAP';
+    const isSeeking = listingType === 'SEEKING';
+
+    const currentAvailable = isSeeking ? false : (dto.currentAvailable ?? false);
+    const currentAvailableOn = isSeeking
+      ? null
+      : this.mapCurrentAvailableOn(currentAvailable, dto.currentAvailableOn);
+
+    // Determine initial status and verification state
+    const needsDocumentVerification =
+      isSeeking &&
+      dto.seekerCategory &&
+      (DOCUMENT_SEEKER_CATEGORIES as readonly string[]).includes(dto.seekerCategory);
+
+    const initialStatus = needsDocumentVerification ? 'DRAFT' : 'ACTIVE';
+    const verificationStatus = isSeeking
+      ? needsDocumentVerification
+        ? 'PENDING'
+        : 'NOT_REQUIRED'
+      : null;
 
     const listingResult = await this.prisma.$transaction(async (tx) => {
       const createdListing = await tx.swapListing.create({
         data: {
           userId,
+          listingType,
+          seekerCategory: dto.seekerCategory ?? null,
+          verificationStatus,
           desiredType: dto.desiredType,
           desiredState: dto.desiredState,
           desiredCity: dto.desiredCity,
           desiredArea: this.normalizeNullableString(dto.desiredArea),
           maxBudget: dto.maxBudget,
           timeline: dto.timeline,
-          currentType: dto.currentType,
-          currentState: dto.currentState,
-          currentCity: dto.currentCity,
-          currentArea: this.normalizeNullableString(dto.currentArea),
-          currentRent: dto.currentRent,
-          currentAvailable: dto.currentAvailable,
+          currentType: isSeeking ? '' : (dto.currentType ?? ''),
+          currentState: isSeeking ? '' : (dto.currentState ?? ''),
+          currentCity: isSeeking ? '' : (dto.currentCity ?? ''),
+          currentArea: isSeeking ? null : this.normalizeNullableString(dto.currentArea),
+          currentRent: isSeeking ? 0 : (dto.currentRent ?? 0),
+          currentAvailable,
           currentAvailableOn,
-          features: dto.features,
-          status: 'ACTIVE',
-          expiresAt: this.computeListingExpiresAt(),
+          features: isSeeking ? [] : (dto.features ?? []),
+          status: initialStatus,
+          expiresAt: needsDocumentVerification ? null : this.computeListingExpiresAt(),
         },
       });
 
@@ -204,8 +243,17 @@ export class ListingsService {
       return { listing: createdListing };
     });
 
-    await this.refreshMatchesForListing(listingResult.listing);
-    this.emitListingEvents(userId, listingResult.listing.id, 'listing_created');
+    // Only run matching for listings that are immediately active
+    if (!needsDocumentVerification) {
+      await this.refreshMatchesForListing({
+        id: listingResult.listing.id,
+        status: listingResult.listing.status,
+        listingType,
+        currentAvailable: listingResult.listing.currentAvailable,
+        userId,
+      });
+      this.emitListingEvents(userId, listingResult.listing.id, 'listing_created');
+    }
 
     return {
       message: 'Listing created successfully',
@@ -215,14 +263,8 @@ export class ListingsService {
 
   async updateListing(userId: string, listingId: string, dto: UpdateListingDto) {
     const listing = await this.prisma.swapListing.findFirst({
-      where: {
-        id: listingId,
-        userId,
-      },
-      select: {
-        id: true,
-        status: true,
-      },
+      where: { id: listingId, userId },
+      select: { id: true, status: true, listingType: true },
     });
 
     if (!listing) {
@@ -275,6 +317,7 @@ export class ListingsService {
     await this.refreshMatchesForListing({
       id: updatedListing.id,
       status: updatedListing.status,
+      listingType: updatedListing.listingType,
       currentAvailable: updatedListing.currentAvailable,
       userId,
     });
@@ -288,14 +331,8 @@ export class ListingsService {
 
   async renewListing(userId: string, listingId: string) {
     const listing = await this.prisma.swapListing.findFirst({
-      where: {
-        id: listingId,
-        userId,
-      },
-      select: {
-        id: true,
-        status: true,
-      },
+      where: { id: listingId, userId },
+      select: { id: true, status: true, listingType: true },
     });
 
     if (!listing) {
@@ -309,9 +346,7 @@ export class ListingsService {
     const expiresAt = this.computeListingExpiresAt();
 
     const renewed = await this.prisma.swapListing.update({
-      where: {
-        id: listingId,
-      },
+      where: { id: listingId },
       data: {
         status: 'ACTIVE',
         expiresAt,
@@ -324,6 +359,7 @@ export class ListingsService {
     await this.refreshMatchesForListing({
       id: renewed.id,
       status: renewed.status,
+      listingType: renewed.listingType,
       currentAvailable: renewed.currentAvailable,
       userId,
     });
@@ -336,6 +372,184 @@ export class ListingsService {
     };
   }
 
+  async uploadVerificationDoc(userId: string, listingId: string, buffer: Buffer) {
+    const listing = await this.prisma.swapListing.findFirst({
+      where: { id: listingId, userId },
+      select: { id: true, listingType: true, verificationStatus: true },
+    });
+
+    if (!listing) {
+      throw new NotFoundException('Listing not found');
+    }
+
+    if (listing.listingType !== 'SEEKING') {
+      throw new BadRequestException('Only seeker listings require verification documents');
+    }
+
+    if (listing.verificationStatus !== 'PENDING') {
+      throw new BadRequestException('This listing does not require a document upload');
+    }
+
+    const url = await this.uploadService.uploadVerificationDocument(buffer, listingId);
+
+    const updated = await this.prisma.swapListing.update({
+      where: { id: listingId },
+      data: { verificationDocumentUrl: url },
+    });
+
+    return {
+      message: 'Document uploaded successfully. Your listing is under review.',
+      listing: updated,
+    };
+  }
+
+  async verifyListing(_adminUserId: string, listingId: string, dto: VerifyListingDto) {
+    const listing = await this.prisma.swapListing.findFirst({
+      where: { id: listingId },
+      select: {
+        id: true,
+        userId: true,
+        listingType: true,
+        verificationStatus: true,
+        user: { select: { fullName: true } },
+      },
+    });
+
+    if (!listing) {
+      throw new NotFoundException('Listing not found');
+    }
+
+    if (listing.listingType !== 'SEEKING') {
+      throw new BadRequestException('Only seeker listings can be verified');
+    }
+
+    if (listing.verificationStatus !== 'PENDING') {
+      throw new BadRequestException('Listing is not pending verification');
+    }
+
+    if (dto.action === 'APPROVE') {
+      const approved = await this.prisma.swapListing.update({
+        where: { id: listingId },
+        data: {
+          verificationStatus: 'APPROVED',
+          verificationNote: null,
+          status: 'ACTIVE',
+          expiresAt: this.computeListingExpiresAt(),
+        },
+      });
+
+      await this.refreshMatchesForListing({
+        id: approved.id,
+        status: approved.status,
+        listingType: approved.listingType,
+        currentAvailable: approved.currentAvailable,
+        userId: listing.userId,
+      });
+
+      await this.notificationService.notifyMany([{
+        userId: listing.userId,
+        type: 'VERIFICATION_APPROVED',
+        title: 'Listing Approved',
+        message: 'Your listing has been verified. You can now connect with matches.',
+        channels: ['IN_APP', 'EMAIL', 'SMS'],
+        payload: { listingId },
+      }]);
+
+      this.emitListingEvents(listing.userId, listingId, 'verification_approved');
+
+      return { message: 'Listing approved', listing: approved };
+    }
+
+    // REJECT
+    const rejected = await this.prisma.swapListing.update({
+      where: { id: listingId },
+      data: {
+        verificationStatus: 'REJECTED',
+        verificationNote: dto.rejectionNote ?? null,
+        status: 'DRAFT',
+      },
+    });
+
+    await this.notificationService.notifyMany([{
+      userId: listing.userId,
+      type: 'VERIFICATION_REJECTED',
+      title: 'Listing Not Approved',
+      message: dto.rejectionNote
+        ? `Your listing was not approved: ${dto.rejectionNote}`
+        : 'Your listing was not approved. Please re-submit with a valid document.',
+      channels: ['IN_APP', 'EMAIL', 'SMS'],
+      payload: { listingId, rejectionNote: dto.rejectionNote },
+    }]);
+
+    return { message: 'Listing rejected', listing: rejected };
+  }
+
+  async getOverviewStats() {
+    const [totalUsers, listingsByStatus, pendingVerifications] = await Promise.all([
+      this.prisma.user.count(),
+      this.prisma.swapListing.groupBy({
+        by: ['status'],
+        _count: { id: true },
+      }),
+      this.prisma.swapListing.count({
+        where: { listingType: 'SEEKING', verificationStatus: 'PENDING' },
+      }),
+    ]);
+
+    const byStatus = Object.fromEntries(
+      ['DRAFT', 'ACTIVE', 'MATCHED', 'CLOSED', 'EXPIRED'].map((s) => [s, 0])
+    ) as Record<string, number>;
+
+    for (const row of listingsByStatus) {
+      byStatus[row.status] = row._count.id;
+    }
+
+    const totalListings = Object.values(byStatus).reduce((a, b) => a + b, 0);
+
+    return {
+      totalUsers,
+      totalListings,
+      activeListings: byStatus['ACTIVE'],
+      matchedListings: byStatus['MATCHED'],
+      pendingVerifications,
+      listingsByStatus: byStatus,
+    };
+  }
+
+  async getPendingVerifications() {
+    const rows = await this.prisma.swapListing.findMany({
+      where: {
+        listingType: 'SEEKING',
+        verificationStatus: 'PENDING',
+      },
+      orderBy: { createdAt: 'asc' },
+      select: {
+        id: true,
+        userId: true,
+        seekerCategory: true,
+        verificationStatus: true,
+        verificationDocumentUrl: true,
+        desiredType: true,
+        desiredState: true,
+        desiredCity: true,
+        desiredArea: true,
+        maxBudget: true,
+        timeline: true,
+        createdAt: true,
+        user: {
+          select: {
+            id: true,
+            fullName: true,
+            phone: true,
+            email: true,
+          },
+        },
+      },
+    });
+
+    return rows.map((r) => ({ ...r, listingId: r.id }));
+  }
+
   async getMyListings(userId: string) {
     const listings = await this.prisma.swapListing.findMany({
       where: { userId },
@@ -344,5 +558,4 @@ export class ListingsService {
 
     return this.attachMatchesToListings(listings);
   }
-
 }
