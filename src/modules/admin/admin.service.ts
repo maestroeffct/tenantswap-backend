@@ -522,7 +522,7 @@ export class AdminService {
         type: 'user_registered',
         label: 'New User',
         actor: u.fullName,
-        meta: u.email,
+        meta: u.email ?? '',
         at: u.createdAt.toISOString(),
       })));
     }
