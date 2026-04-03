@@ -61,6 +61,39 @@ export class VacancyService {
     return { success: true };
   }
 
+  async listPublicVacancies(opts: { state?: string; city?: string; apartmentType?: string; page?: number; limit?: number }) {
+    const page = Math.max(1, opts.page ?? 1);
+    const limit = Math.min(50, Math.max(1, opts.limit ?? 20));
+    const skip = (page - 1) * limit;
+
+    const where: any = {};
+    if (opts.state) where.state = opts.state;
+    if (opts.city) where.city = opts.city;
+    if (opts.apartmentType) where.apartmentType = opts.apartmentType;
+
+    const [total, vacancies] = await Promise.all([
+      this.prisma.vacancyAlert.count({ where }),
+      this.prisma.vacancyAlert.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          apartmentType: true,
+          state: true,
+          city: true,
+          area: true,
+          features: true,
+          createdAt: true,
+          user: { select: { id: true, fullName: true, profilePhotoUrl: true } },
+        },
+      }),
+    ]);
+
+    return { vacancies, meta: { total, page, limit, pages: Math.ceil(total / limit) } };
+  }
+
   async getPublicVacancy(vacancyId: string) {
     const vacancy = await this.prisma.vacancyAlert.findUnique({
       where: { id: vacancyId },

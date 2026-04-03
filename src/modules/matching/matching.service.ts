@@ -608,6 +608,57 @@ export class MatchingService {
     await this.expireListings('REQUEST');
     await this.expirePendingChains('REQUEST');
     await this.expireListingInterests('REQUEST');
+    await this.sweepStaleAvailability();
+  }
+
+  private async sweepStaleAvailability() {
+    const now = new Date();
+
+    // Find SWAP listings that are active, marked available, but availableOn date has passed
+    const staleListings = await this.prisma.swapListing.findMany({
+      where: {
+        status: 'ACTIVE',
+        listingType: 'SWAP',
+        currentAvailable: true,
+        currentAvailableOn: { lt: now },
+      },
+      select: { id: true, userId: true },
+    });
+
+    if (staleListings.length === 0) return;
+
+    // Only notify listings that haven't received this alert before
+    const alreadyNotified = await this.prisma.userNotification.findMany({
+      where: {
+        type: 'AVAILABILITY_STALE',
+        userId: { in: staleListings.map((l) => l.userId) },
+      },
+      select: { userId: true, payload: true },
+    });
+
+    const notifiedListingIds = new Set(
+      alreadyNotified
+        .map((n) => (n.payload as Record<string, string> | null)?.listingId)
+        .filter(Boolean),
+    );
+
+    const toNotify = staleListings.filter(
+      (l) => !notifiedListingIds.has(l.id),
+    );
+
+    if (toNotify.length === 0) return;
+
+    await this.notificationService.notifyMany(
+      toNotify.map((l) => ({
+        userId: l.userId,
+        type: 'AVAILABILITY_STALE',
+        title: 'Update Your Availability',
+        message:
+          'Your listed available date has passed. Please update when the apartment will be ready, or mark it as unavailable if it\'s no longer free.',
+        channels: ['IN_APP', 'EMAIL'] as const,
+        payload: { listingId: l.id },
+      })),
+    );
   }
 
   private computeAcceptByDate() {
@@ -1415,12 +1466,19 @@ export class MatchingService {
             { verificationStatus: 'PENDING' },
           ],
         },
-        // SWAP listings must have currentAvailable; SEEKING listings are exempt
+        // SWAP listings must have currentAvailable and a non-past availableOn date; SEEKING listings are exempt
         AND: [
           {
             OR: [
               { listingType: 'SEEKING' },
               { currentAvailable: true },
+            ],
+          },
+          {
+            OR: [
+              { listingType: 'SEEKING' },
+              { currentAvailableOn: null },
+              { currentAvailableOn: { gte: now } },
             ],
           },
         ],
@@ -2013,10 +2071,10 @@ export class MatchingService {
       },
       {
         userId: requesterUserId,
-        type: 'INTEREST_REQUESTED',
+        type: 'INTEREST_SENT',
         title: 'Request Sent',
         message: `Your match request was sent to ${targetListing.user.fullName}.`,
-        channels: ['IN_APP', 'EMAIL', 'SMS'],
+        channels: ['IN_APP'],
         payload: {
           interestId: interest.id,
           listingId: targetListing.id,

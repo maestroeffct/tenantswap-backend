@@ -150,4 +150,35 @@ export class RegisterDto {
   @MaxLength(100)
   relationship_status?: string;
 
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  @IsOptional()
+  @IsString()
+  @MaxLength(150)
+  workplaceName?: string;
+
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  workplaceState?: string;
+
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  workplaceCity?: string;
+
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  workplaceArea?: string;
 }

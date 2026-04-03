@@ -6,6 +6,7 @@ import {
   NotFoundException,
   Param,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
@@ -23,6 +24,23 @@ export class VacancyController {
   constructor(private readonly vacancyService: VacancyService) {}
 
   // ── Public endpoints (no auth) ─────────────────────────────────────────────
+
+  @Get()
+  listPublic(
+    @Query('state') state?: string,
+    @Query('city') city?: string,
+    @Query('apartmentType') apartmentType?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.vacancyService.listPublicVacancies({
+      state,
+      city,
+      apartmentType,
+      page: page ? Number(page) : undefined,
+      limit: limit ? Number(limit) : undefined,
+    });
+  }
 
   @Get(':vacancyId')
   async getPublic(@Param('vacancyId') vacancyId: string) {

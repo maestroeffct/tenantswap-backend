@@ -230,4 +230,21 @@ export class AdminController {
   ) {
     return this.matchingService.rerunChainMembersByAdmin(chainId, user.id);
   }
+
+  // ─── Activity Feed ────────────────────────────────────────────────────────────
+
+  @Get('activity')
+  listActivity(
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+    @Query('type') type?: string,
+    @Query('since') since?: string,
+  ) {
+    return this.adminService.listActivity({
+      limit: limit ? Number(limit) : undefined,
+      offset: offset ? Number(offset) : undefined,
+      type,
+      since,
+    });
+  }
 }

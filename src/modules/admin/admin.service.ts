@@ -426,4 +426,158 @@ export class AdminService {
       meta: { total, page, limit, pages: Math.ceil(total / limit) },
     };
   }
+
+  // ─── Activity Feed ────────────────────────────────────────────────────────────
+
+  async listActivity(opts: {
+    limit?: number;
+    offset?: number;
+    type?: string;
+    since?: string;
+  }) {
+    const limit = Math.min(100, Math.max(1, opts.limit ?? 30));
+    const offset = Math.max(0, opts.offset ?? 0);
+    const since = opts.since ? new Date(opts.since) : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+    const [users, listings, interests, chains, reliabilityEvents] = await Promise.all([
+      this.prisma.user.findMany({
+        where: { createdAt: { gte: since } },
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+        select: { id: true, fullName: true, email: true, createdAt: true },
+      }),
+      this.prisma.swapListing.findMany({
+        where: { createdAt: { gte: since } },
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+        select: {
+          id: true,
+          listingType: true,
+          currentType: true,
+          desiredType: true,
+          currentCity: true,
+          desiredCity: true,
+          createdAt: true,
+          user: { select: { id: true, fullName: true } },
+        },
+      }),
+      this.prisma.listingInterest.findMany({
+        where: { createdAt: { gte: since } },
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+        select: {
+          id: true,
+          status: true,
+          createdAt: true,
+          requesterUserId: true,
+          listing: {
+            select: {
+              id: true,
+              userId: true,
+              user: { select: { fullName: true } },
+            },
+          },
+        },
+      }),
+      this.prisma.swapChain.findMany({
+        where: { createdAt: { gte: since } },
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+        select: {
+          id: true,
+          status: true,
+          cycleSize: true,
+          createdAt: true,
+        },
+      }),
+      this.prisma.reliabilityEvent.findMany({
+        where: { createdAt: { gte: since } },
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+        select: {
+          id: true,
+          eventType: true,
+          scoreDelta: true,
+          reason: true,
+          createdAt: true,
+          user: { select: { id: true, fullName: true } },
+        },
+      }),
+    ]);
+
+    type ActivityEvent = {
+      id: string;
+      type: string;
+      label: string;
+      actor: string;
+      meta: string;
+      at: string;
+    };
+
+    const events: ActivityEvent[] = [];
+
+    if (!opts.type || opts.type === 'user_registered') {
+      events.push(...users.map((u) => ({
+        id: `user:${u.id}`,
+        type: 'user_registered',
+        label: 'New User',
+        actor: u.fullName,
+        meta: u.email,
+        at: u.createdAt.toISOString(),
+      })));
+    }
+
+    if (!opts.type || opts.type === 'listing_created') {
+      events.push(...listings.map((l) => ({
+        id: `listing:${l.id}`,
+        type: 'listing_created',
+        label: l.listingType === 'SWAP' ? 'Listing Created (SWAP)' : 'Listing Created (SEEKING)',
+        actor: l.user.fullName,
+        meta: l.listingType === 'SWAP'
+          ? `${l.currentType ?? '—'} → ${l.desiredType ?? '—'} (${l.currentCity ?? '—'})`
+          : `Seeking ${l.desiredType ?? '—'} in ${l.desiredCity ?? '—'}`,
+        at: l.createdAt.toISOString(),
+      })));
+    }
+
+    if (!opts.type || opts.type === 'interest_sent') {
+      events.push(...interests.map((i) => ({
+        id: `interest:${i.id}`,
+        type: 'interest_sent',
+        label: 'Connection Request',
+        actor: i.requesterUserId,
+        meta: `→ listing of ${i.listing.user.fullName} · status: ${i.status}`,
+        at: i.createdAt.toISOString(),
+      })));
+    }
+
+    if (!opts.type || opts.type === 'chain_formed') {
+      events.push(...chains.map((c) => ({
+        id: `chain:${c.id}`,
+        type: 'chain_formed',
+        label: `Chain ${c.status}`,
+        actor: 'System',
+        meta: `${c.cycleSize}-way swap`,
+        at: c.createdAt.toISOString(),
+      })));
+    }
+
+    if (!opts.type || opts.type === 'reliability_event') {
+      events.push(...reliabilityEvents.map((r) => ({
+        id: `reliability:${r.id}`,
+        type: 'reliability_event',
+        label: 'Reliability Event',
+        actor: r.user.fullName,
+        meta: `${r.eventType} · ${r.scoreDelta > 0 ? '+' : ''}${r.scoreDelta} pts${r.reason ? ` · ${r.reason}` : ''}`,
+        at: r.createdAt.toISOString(),
+      })));
+    }
+
+    events.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
+
+    return {
+      items: events.slice(offset, offset + limit),
+      meta: { total: events.length, offset, limit },
+    };
+  }
 }
