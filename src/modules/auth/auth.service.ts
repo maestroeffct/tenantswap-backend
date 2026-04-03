@@ -233,12 +233,35 @@ export class AuthService {
       },
     });
 
-    if (existingEmailUser && existingEmailUser.oauthProvider) {
-      throw new ConflictException(
-        'This email is already linked to another account or provider',
+    if (existingEmailUser) {
+      if (existingEmailUser.oauthProvider && existingEmailUser.oauthProvider !== provider) {
+        throw new ConflictException(
+          'This email is already linked to another account or provider',
+        );
+      }
+
+      // Email exists (password or same OAuth provider) — link OAuth and log in
+      await this.prisma.user.update({
+        where: { id: existingEmailUser.id },
+        data: {
+          oauthProvider: provider,
+          oauthProviderUserId: dto.oauthId,
+          emailVerifiedAt: new Date(),
+        },
+      });
+
+      this.audit('oauth_login_success', {
+        ip,
+        userId: existingEmailUser.id,
+        email: dto.email,
+        provider,
+      });
+
+      return this.buildOauthAuthResponse(
+        existingEmailUser.id,
+        'OAuth login successful',
       );
     }
-
 
     const fullName = this.resolveDisplayName(dto.fullName, "");
 
@@ -252,13 +275,13 @@ export class AuthService {
         email: dto.email,
         phone: normalizedPhone,
         password: passwordHash,
-        emailVerifiedAt:new Date(),
+        emailVerifiedAt: new Date(),
         oauthProvider: provider,
         oauthProviderUserId: dto.oauthId,
         allowIncomingCalls: dto.allowIncomingCalls ?? false,
         canConnectLandlord: dto.canConnectLandlord ?? false,
         hasLandlordContact: dto.hasLandlordContact ?? false,
-        profilePhotoUrl: dto.profilePhotoUrl?.trim()  || null,
+        profilePhotoUrl: dto.profilePhotoUrl?.trim() || null,
         gender: this.mapGender(dto.gender),
         emailVerificationTokenHash: tokenArtifacts.tokenHash,
         emailVerificationExpiresAt: tokenArtifacts.expiresAt,
