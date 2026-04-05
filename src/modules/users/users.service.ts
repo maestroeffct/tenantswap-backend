@@ -76,6 +76,14 @@ export class UsersService {
               status: 'ACTIVE',
               currentAvailable: true,
               OR: [{ expiresAt: null }, { expiresAt: { gte: new Date() } }],
+              AND: [
+                {
+                  OR: [
+                    { currentAvailableOn: null },
+                    { currentAvailableOn: { gte: new Date() } },
+                  ],
+                },
+              ],
             },
             select: {
               id: true,

@@ -3070,6 +3070,30 @@ export class MatchingService {
       },
     });
 
+    // Notify the other chain members that this user approved the unlock
+    const approver = unlock.chain.members.find((m) => m.userId === userId);
+    const approverName = approver ? await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { fullName: true },
+    }).then((u) => u?.fullName ?? 'A member') : 'A member';
+
+    const otherMemberUserIds = unlock.chain.members
+      .filter((m) => m.userId !== userId)
+      .map((m) => m.userId);
+
+    if (otherMemberUserIds.length > 0) {
+      await this.notificationService.notifyMany(
+        otherMemberUserIds.map((recipientId) => ({
+          userId: recipientId,
+          type: 'CONTACT_UNLOCK_APPROVED',
+          title: 'Number Unlocked',
+          message: `${approverName} has unlocked their phone number for your chain.`,
+          channels: ['IN_APP'] as const,
+          payload: { chainId: unlock.chainId, unlockId },
+        })),
+      );
+    }
+
     return { success: true };
   }
 }
