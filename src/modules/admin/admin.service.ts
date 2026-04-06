@@ -1,9 +1,14 @@
+import * as bcrypt from 'bcrypt';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
+import { PushService } from '../../common/services/push.service';
 
 @Injectable()
 export class AdminService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly pushService: PushService,
+  ) {}
 
   // ─── Users ───────────────────────────────────────────────────────────────────
 
@@ -217,6 +222,7 @@ export class AdminService {
           currentCity: true,
           maxBudget: true,
           timeline: true,
+          viewCount: true,
           createdAt: true,
           expiresAt: true,
           user: {
@@ -251,7 +257,41 @@ export class AdminService {
     });
 
     if (!listing) throw new NotFoundException('Listing not found');
-    return listing;
+
+    // Attach near-misses for SWAP ACTIVE listings
+    let nearMisses: { id: string; currentType: string; currentCity: string; currentRent: number; desiredType: string; missReason: string }[] = [];
+    if (listing.status === 'ACTIVE' && listing.listingType === 'SWAP') {
+      const now = new Date();
+      const budgetCeiling = Math.round(listing.maxBudget * 1.3);
+      const candidates = await this.prisma.swapListing.findMany({
+        where: {
+          id: { not: listingId },
+          status: 'ACTIVE',
+          listingType: 'SWAP',
+          currentState: { equals: listing.desiredState, mode: 'insensitive' },
+          currentRent: { lte: budgetCeiling },
+          OR: [{ expiresAt: null }, { expiresAt: { gte: now } }],
+          AND: [{ OR: [{ currentAvailableOn: null }, { currentAvailableOn: { gte: now } }] }],
+        },
+        select: { id: true, currentType: true, currentCity: true, currentRent: true, currentAvailable: true, desiredType: true },
+        take: 10,
+        orderBy: { currentRent: 'asc' },
+      });
+      const desiredNorm = listing.desiredType.trim().toLowerCase();
+      for (const c of candidates) {
+        const typeMatch = c.currentType.trim().toLowerCase() === desiredNorm ||
+          c.currentType.trim().toLowerCase().includes(desiredNorm) ||
+          desiredNorm.includes(c.currentType.trim().toLowerCase());
+        const withinBudget = c.currentRent <= listing.maxBudget;
+        const isAvailable = c.currentAvailable;
+        if (typeMatch && withinBudget && isAvailable) continue;
+        const missReason = !typeMatch ? 'wrong_type' : !withinBudget ? 'over_budget' : 'not_available';
+        nearMisses.push({ id: c.id, currentType: c.currentType, currentCity: c.currentCity, currentRent: c.currentRent, desiredType: c.desiredType, missReason });
+        if (nearMisses.length >= 5) break;
+      }
+    }
+
+    return { ...listing, nearMisses };
   }
 
   async closeListingByAdmin(adminId: string, listingId: string, reason?: string) {
@@ -427,6 +467,88 @@ export class AdminService {
     };
   }
 
+  // ─── Near-miss breakdown ──────────────────────────────────────────────────────
+
+  async getNearMissBreakdown() {
+    const now = new Date();
+
+    // Find all active SWAP listings that have zero match candidates
+    const activeSwap = await this.prisma.swapListing.findMany({
+      where: {
+        status: 'ACTIVE',
+        listingType: 'SWAP',
+        OR: [{ expiresAt: null }, { expiresAt: { gte: now } }],
+      },
+      select: {
+        id: true,
+        desiredState: true,
+        desiredType: true,
+        maxBudget: true,
+      },
+      take: 200,
+    });
+
+    // For each, count how many near-misses exist and why
+    const breakdown = { wrong_type: 0, over_budget: 0, not_available: 0, no_near_miss: 0 };
+    let withNearMiss = 0;
+    let withFullMatch = 0;
+
+    for (const listing of activeSwap) {
+      const budgetCeiling = Math.round(listing.maxBudget * 1.3);
+      const candidates = await this.prisma.swapListing.findMany({
+        where: {
+          id: { not: listing.id },
+          status: 'ACTIVE',
+          listingType: 'SWAP',
+          currentState: { equals: listing.desiredState, mode: 'insensitive' },
+          currentRent: { lte: budgetCeiling },
+          OR: [{ expiresAt: null }, { expiresAt: { gte: now } }],
+          AND: [{ OR: [{ currentAvailableOn: null }, { currentAvailableOn: { gte: now } }] }],
+        },
+        select: { currentType: true, currentRent: true, currentAvailable: true },
+        take: 10,
+      });
+
+      const desiredNorm = listing.desiredType.trim().toLowerCase();
+      let foundFullMatch = false;
+      let foundNearMiss = false;
+      const missReasons = new Set<string>();
+
+      for (const c of candidates) {
+        const typeMatch = c.currentType.trim().toLowerCase() === desiredNorm ||
+          c.currentType.trim().toLowerCase().includes(desiredNorm) ||
+          desiredNorm.includes(c.currentType.trim().toLowerCase());
+        const withinBudget = c.currentRent <= listing.maxBudget;
+        const isAvailable = c.currentAvailable;
+        if (typeMatch && withinBudget && isAvailable) { foundFullMatch = true; break; }
+        if (!typeMatch) missReasons.add('wrong_type');
+        else if (!withinBudget) missReasons.add('over_budget');
+        else missReasons.add('not_available');
+        foundNearMiss = true;
+      }
+
+      if (foundFullMatch) { withFullMatch++; continue; }
+      if (!foundNearMiss) { breakdown.no_near_miss++; continue; }
+      withNearMiss++;
+      // Count the primary miss reason for this listing
+      if (missReasons.has('wrong_type')) breakdown.wrong_type++;
+      else if (missReasons.has('over_budget')) breakdown.over_budget++;
+      else breakdown.not_available++;
+    }
+
+    return {
+      total: activeSwap.length,
+      withFullMatch,
+      withNearMiss,
+      noActivity: breakdown.no_near_miss,
+      missReasons: {
+        wrongType: breakdown.wrong_type,
+        overBudget: breakdown.over_budget,
+        notAvailable: breakdown.not_available,
+      },
+    };
+  }
+
   // ─── Activity Feed ────────────────────────────────────────────────────────────
 
   async listActivity(opts: {
@@ -579,5 +701,349 @@ export class AdminService {
       items: events.slice(offset, offset + limit),
       meta: { total: events.length, offset, limit },
     };
+  }
+
+  // ─── Push Notifications (Admin Campaigns) ────────────────────────────────────
+
+  async listPushNotifications(opts: { search?: string; status?: string; page?: number; limit?: number }) {
+    const page = Math.max(1, opts.page ?? 1);
+    const limit = Math.min(100, Math.max(1, opts.limit ?? 20));
+    const skip = (page - 1) * limit;
+
+    const where: any = {};
+    if (opts.status) where.status = opts.status;
+    if (opts.search) {
+      const q = opts.search.trim();
+      where.OR = [
+        { title: { contains: q, mode: 'insensitive' } },
+        { description: { contains: q, mode: 'insensitive' } },
+      ];
+    }
+
+    const [total, items] = await Promise.all([
+      this.prisma.adminPushNotification.count({ where }),
+      this.prisma.adminPushNotification.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+      }),
+    ]);
+
+    return { items, meta: { total, page, limit, pages: Math.ceil(total / limit) } };
+  }
+
+  async createPushNotification(adminId: string, dto: {
+    title: string;
+    description: string;
+    zone?: string;
+    target?: string;
+    imageUrl?: string;
+    scheduledAt?: string;
+  }) {
+    const isScheduled = !!dto.scheduledAt;
+    const record = await this.prisma.adminPushNotification.create({
+      data: {
+        title: dto.title.trim(),
+        description: dto.description.trim(),
+        zone: dto.zone ?? 'ALL',
+        target: dto.target ?? 'ALL_USERS',
+        imageUrl: dto.imageUrl ?? null,
+        isActive: true,
+        status: isScheduled ? 'SCHEDULED' : 'DRAFT',
+        scheduledAt: dto.scheduledAt ? new Date(dto.scheduledAt) : null,
+        createdByUserId: adminId,
+      },
+    });
+
+    // If not scheduled, send immediately
+    if (!isScheduled) {
+      await this._dispatchPushNotification(record.id);
+    }
+
+    return record;
+  }
+
+  async updatePushNotification(id: string, dto: {
+    title?: string;
+    description?: string;
+    zone?: string;
+    target?: string;
+    imageUrl?: string;
+    isActive?: boolean;
+    scheduledAt?: string | null;
+  }) {
+    const existing = await this.prisma.adminPushNotification.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Push notification not found');
+
+    const data: any = {};
+    if (dto.title !== undefined) data.title = dto.title.trim();
+    if (dto.description !== undefined) data.description = dto.description.trim();
+    if (dto.zone !== undefined) data.zone = dto.zone;
+    if (dto.target !== undefined) data.target = dto.target;
+    if (dto.imageUrl !== undefined) data.imageUrl = dto.imageUrl;
+    if (dto.isActive !== undefined) data.isActive = dto.isActive;
+    if (dto.scheduledAt !== undefined) {
+      data.scheduledAt = dto.scheduledAt ? new Date(dto.scheduledAt) : null;
+      if (dto.scheduledAt) data.status = 'SCHEDULED';
+    }
+
+    return this.prisma.adminPushNotification.update({ where: { id }, data });
+  }
+
+  async deletePushNotification(id: string) {
+    const existing = await this.prisma.adminPushNotification.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Push notification not found');
+    await this.prisma.adminPushNotification.delete({ where: { id } });
+    return { success: true };
+  }
+
+  async sendPushNotificationNow(id: string) {
+    const existing = await this.prisma.adminPushNotification.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Push notification not found');
+    return this._dispatchPushNotification(id);
+  }
+
+  async sendPushToUser(userId: string, title: string, body: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, fullName: true, pushToken: true },
+    });
+    if (!user) throw new NotFoundException('User not found');
+
+    // Create in-app notification
+    await this.prisma.userNotification.create({
+      data: { userId, type: 'ADMIN_MESSAGE', title, message: body },
+    });
+
+    // Send push if token available
+    if (user.pushToken) {
+      await this.pushService.sendPush({ token: user.pushToken, title, body });
+    }
+
+    return { success: true, hasPushToken: !!user.pushToken };
+  }
+
+  private async _dispatchPushNotification(id: string) {
+    const record = await this.prisma.adminPushNotification.findUnique({ where: { id } });
+    if (!record) return;
+
+    // Build user filter
+    const where: any = { pushToken: { not: null } };
+    if (record.zone && record.zone !== 'ALL') {
+      where.OR = [
+        { listings: { some: { desiredState: { equals: record.zone, mode: 'insensitive' } } } },
+        { listings: { some: { currentState: { equals: record.zone, mode: 'insensitive' } } } },
+      ];
+    }
+    if (record.target === 'SEEKERS') {
+      where.listings = { some: { listingType: 'SEEKING', status: 'ACTIVE' } };
+    } else if (record.target === 'SWAPPERS') {
+      where.listings = { some: { listingType: 'SWAP', status: 'ACTIVE' } };
+    } else if (record.target === 'VERIFIED_USERS') {
+      where.listings = { some: { verificationStatus: 'APPROVED' } };
+    }
+
+    const users = await this.prisma.user.findMany({
+      where,
+      select: { id: true, pushToken: true },
+      take: 2000,
+    });
+
+    const tokens = users.map((u) => u.pushToken!).filter(Boolean);
+
+    // Create in-app notifications
+    await this.prisma.userNotification.createMany({
+      data: users.map((u) => ({
+        userId: u.id,
+        type: 'ADMIN_BROADCAST',
+        title: record.title,
+        message: record.description,
+      })),
+      skipDuplicates: true,
+    });
+
+    // Send FCM push
+    if (tokens.length > 0) {
+      await this.pushService.sendPushToMany({
+        tokens,
+        title: record.title,
+        body: record.description,
+      });
+    }
+
+    await this.prisma.adminPushNotification.update({
+      where: { id },
+      data: { status: 'SENT', sentAt: new Date(), recipientCount: users.length },
+    });
+
+    return { success: true, recipientCount: users.length };
+  }
+
+  // ─── Vacancies (Admin) ───────────────────────────────────────────────────────
+
+  async listVacancies(opts: { state?: string; city?: string; apartmentType?: string; page?: number; limit?: number }) {
+    const page = Math.max(1, opts.page ?? 1);
+    const limit = Math.min(100, Math.max(1, opts.limit ?? 20));
+    const skip = (page - 1) * limit;
+
+    const where: any = {};
+    if (opts.state) where.state = { equals: opts.state, mode: 'insensitive' };
+    if (opts.city) where.city = { equals: opts.city, mode: 'insensitive' };
+    if (opts.apartmentType) where.apartmentType = { contains: opts.apartmentType, mode: 'insensitive' };
+
+    const [total, items] = await Promise.all([
+      this.prisma.vacancyAlert.count({ where }),
+      this.prisma.vacancyAlert.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          apartmentType: true,
+          state: true,
+          city: true,
+          area: true,
+          features: true,
+          shareCount: true,
+          clickCount: true,
+          createdAt: true,
+          user: { select: { id: true, fullName: true, phone: true, email: true } },
+        },
+      }),
+    ]);
+
+    return { items, meta: { total, page, limit, pages: Math.ceil(total / limit) } };
+  }
+
+  async deleteVacancy(vacancyId: string) {
+    const vacancy = await this.prisma.vacancyAlert.findUnique({ where: { id: vacancyId } });
+    if (!vacancy) throw new NotFoundException('Vacancy not found');
+    await this.prisma.vacancyAlert.delete({ where: { id: vacancyId } });
+    return { success: true };
+  }
+
+  // ─── Create User (Admin) ──────────────────────────────────────────────────────
+
+  async createUser(dto: {
+    fullName: string;
+    phone: string;
+    email?: string;
+    password: string;
+    role?: string;
+  }) {
+    const existing = await this.prisma.user.findUnique({ where: { phone: dto.phone } });
+    if (existing) throw new BadRequestException('Phone number already registered');
+
+    if (dto.email) {
+      const emailExists = await this.prisma.user.findUnique({ where: { email: dto.email } });
+      if (emailExists) throw new BadRequestException('Email already registered');
+    }
+
+    const hashed = await bcrypt.hash(dto.password, 10);
+    const user = await this.prisma.user.create({
+      data: {
+        fullName: dto.fullName.trim(),
+        phone: dto.phone.trim(),
+        email: dto.email?.trim() || null,
+        password: hashed,
+        role: (dto.role as any) ?? 'USER',
+        onboardingComplete: true,
+        phoneVerifiedAt: new Date(),
+      },
+      select: { id: true, fullName: true, email: true, phone: true, role: true, createdAt: true },
+    });
+
+    return { message: 'User created', user };
+  }
+
+  // ─── Create Listing (Admin) ───────────────────────────────────────────────────
+
+  async createListing(dto: {
+    userId: string;
+    listingType: string;
+    desiredType: string;
+    desiredState: string;
+    desiredCity: string;
+    desiredArea?: string;
+    maxBudget: number;
+    timeline: string;
+    currentType?: string;
+    currentState?: string;
+    currentCity?: string;
+    currentRent?: number;
+    currentAvailable?: boolean;
+    features?: string[];
+  }) {
+    const user = await this.prisma.user.findUnique({ where: { id: dto.userId }, select: { id: true } });
+    if (!user) throw new NotFoundException('User not found');
+
+    const listing = await this.prisma.swapListing.create({
+      data: {
+        userId: dto.userId,
+        listingType: dto.listingType as any,
+        desiredType: dto.desiredType,
+        desiredState: dto.desiredState,
+        desiredCity: dto.desiredCity,
+        desiredArea: dto.desiredArea ?? null,
+        maxBudget: dto.maxBudget,
+        timeline: dto.timeline,
+        currentType: dto.currentType ?? '',
+        currentState: dto.currentState ?? '',
+        currentCity: dto.currentCity ?? '',
+        currentRent: dto.currentRent ?? 0,
+        currentAvailable: dto.currentAvailable ?? false,
+        features: dto.features ?? [],
+        status: 'ACTIVE',
+      },
+    });
+
+    return { message: 'Listing created', listing };
+  }
+
+  // ─── Staff / Employee management ─────────────────────────────────────────────
+
+  async listStaff(opts: { page?: number; limit?: number; search?: string; role?: string }) {
+    const page = Math.max(1, opts.page ?? 1);
+    const limit = Math.min(100, Math.max(1, opts.limit ?? 20));
+    const skip = (page - 1) * limit;
+
+    const where: any = { role: { in: ['ADMIN', 'SUPER_ADMIN', 'MODERATOR', 'SUPPORT'] } };
+    if (opts.role) where.role = opts.role;
+    if (opts.search) {
+      const q = opts.search.trim();
+      where.AND = [
+        {
+          OR: [
+            { fullName: { contains: q, mode: 'insensitive' } },
+            { email: { contains: q, mode: 'insensitive' } },
+            { phone: { contains: q, mode: 'insensitive' } },
+          ],
+        },
+      ];
+    }
+
+    const [total, staff] = await Promise.all([
+      this.prisma.user.count({ where }),
+      this.prisma.user.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          fullName: true,
+          email: true,
+          phone: true,
+          role: true,
+          createdAt: true,
+          phoneVerifiedAt: true,
+          blockedUntil: true,
+        },
+      }),
+    ]);
+
+    return { items: staff, meta: { total, page, limit, pages: Math.ceil(total / limit) } };
   }
 }

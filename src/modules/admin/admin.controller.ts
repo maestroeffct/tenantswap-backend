@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -22,6 +23,10 @@ import { BreakChainDto } from './dto/break-chain.dto';
 import { UnblockUserDto } from './dto/unblock-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { CloseListingDto } from './dto/close-listing.dto';
+import { CreatePushNotificationDto } from './dto/create-push-notification.dto';
+import { SendToUserDto } from './dto/send-to-user.dto';
+import { CreateUserDto } from './dto/create-user.dto';
+import { CreateListingDto } from './dto/create-listing.dto';
 import { VerifyListingDto } from '../listings/dto/verify-listing.dto';
 
 @Controller('admin')
@@ -39,6 +44,11 @@ export class AdminController {
   @Get('stats/overview')
   getOverviewStats() {
     return this.listingsService.getOverviewStats();
+  }
+
+  @Get('stats/near-misses')
+  getNearMissBreakdown() {
+    return this.adminService.getNearMissBreakdown();
   }
 
   // ─── Verifications ────────────────────────────────────────────────────────────
@@ -245,6 +255,107 @@ export class AdminController {
       offset: offset ? Number(offset) : undefined,
       type,
       since,
+    });
+  }
+
+  // ─── Push Notifications ───────────────────────────────────────────────────────
+
+  @Get('push-notifications')
+  listPushNotifications(
+    @Query('search') search?: string,
+    @Query('status') status?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.adminService.listPushNotifications({
+      search,
+      status,
+      page: page ? Number(page) : undefined,
+      limit: limit ? Number(limit) : undefined,
+    });
+  }
+
+  @Post('push-notifications')
+  createPushNotification(
+    @CurrentUser() user: CurrentUserPayload,
+    @Body() dto: CreatePushNotificationDto,
+  ) {
+    return this.adminService.createPushNotification(user.id, dto);
+  }
+
+  @Patch('push-notifications/:id')
+  updatePushNotification(
+    @Param('id') id: string,
+    @Body() dto: Partial<CreatePushNotificationDto> & { isActive?: boolean },
+  ) {
+    return this.adminService.updatePushNotification(id, dto);
+  }
+
+  @Delete('push-notifications/:id')
+  deletePushNotification(@Param('id') id: string) {
+    return this.adminService.deletePushNotification(id);
+  }
+
+  @Post('push-notifications/:id/send')
+  sendPushNotificationNow(@Param('id') id: string) {
+    return this.adminService.sendPushNotificationNow(id);
+  }
+
+  @Post('push-notifications/send-to-user')
+  sendPushToUser(@Body() dto: SendToUserDto) {
+    return this.adminService.sendPushToUser(dto.userId, dto.title, dto.body);
+  }
+
+  // ─── Vacancies (Admin) ────────────────────────────────────────────────────────
+
+  @Get('vacancies')
+  listVacancies(
+    @Query('state') state?: string,
+    @Query('city') city?: string,
+    @Query('apartmentType') apartmentType?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.adminService.listVacancies({
+      state,
+      city,
+      apartmentType,
+      page: page ? Number(page) : undefined,
+      limit: limit ? Number(limit) : undefined,
+    });
+  }
+
+  @Delete('vacancies/:vacancyId')
+  deleteVacancy(@Param('vacancyId') vacancyId: string) {
+    return this.adminService.deleteVacancy(vacancyId);
+  }
+
+  // ─── Create User / Listing ────────────────────────────────────────────────────
+
+  @Post('users/create')
+  createUser(@Body() dto: CreateUserDto) {
+    return this.adminService.createUser(dto);
+  }
+
+  @Post('listings/create')
+  createListing(@Body() dto: CreateListingDto) {
+    return this.adminService.createListing(dto);
+  }
+
+  // ─── Staff Management ─────────────────────────────────────────────────────────
+
+  @Get('staff')
+  listStaff(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('search') search?: string,
+    @Query('role') role?: string,
+  ) {
+    return this.adminService.listStaff({
+      page: page ? Number(page) : undefined,
+      limit: limit ? Number(limit) : undefined,
+      search,
+      role,
     });
   }
 }

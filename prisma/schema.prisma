@@ -143,7 +143,10 @@ model VacancyAlert {
 
 enum UserRole {
   USER
+  SUPPORT
+  MODERATOR
   ADMIN
+  SUPER_ADMIN
 }
 
 enum AuthProvider {
@@ -400,6 +403,26 @@ enum PaymentTransactionStatus {
   SUCCESS
   FAILED
   CANCELED
+}
+
+model AdminPushNotification {
+  id              String    @id @default(uuid())
+  title           String
+  description     String
+  zone            String    @default("ALL")
+  target          String    @default("ALL_USERS")
+  imageUrl        String?
+  isActive        Boolean   @default(true)
+  status          String    @default("DRAFT")
+  scheduledAt     DateTime?
+  sentAt          DateTime?
+  recipientCount  Int       @default(0)
+  createdByUserId String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([status, scheduledAt])
+  @@index([createdByUserId, createdAt])
 }
 
 model PaymentWebhookEvent {
