@@ -558,4 +558,23 @@ export class ListingsService {
 
     return this.attachMatchesToListings(listings);
   }
+
+  async trackView(listingId: string): Promise<void> {
+    await this.prisma.$executeRaw`
+      UPDATE "SwapListing"
+      SET "viewCount" = "viewCount" + 1
+      WHERE id = ${listingId} AND status = 'ACTIVE'
+    `;
+  }
+
+  async getDemandByCity(city: string): Promise<{ count: number }> {
+    const count = await this.prisma.swapListing.count({
+      where: {
+        status: 'ACTIVE',
+        desiredCity: { equals: city, mode: 'insensitive' },
+        OR: [{ expiresAt: null }, { expiresAt: { gte: new Date() } }],
+      },
+    });
+    return { count };
+  }
 }

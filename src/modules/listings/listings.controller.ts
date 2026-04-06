@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UploadedFile,
   UseGuards,
   UseInterceptors,
@@ -58,6 +59,19 @@ export class ListingsController {
   @Get('me')
   getMine(@CurrentUser() user: CurrentUserPayload) {
     return this.listingsService.getMyListings(user.id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post(':listingId/view')
+  trackView(@Param('listingId') listingId: string) {
+    return this.listingsService.trackView(listingId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('demand')
+  getDemand(@Query('city') city: string) {
+    if (!city) throw new BadRequestException('city is required');
+    return this.listingsService.getDemandByCity(city);
   }
 
   @UseGuards(JwtAuthGuard)
