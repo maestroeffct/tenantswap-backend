@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -7,14 +8,19 @@ import {
   Patch,
   Post,
   Query,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { CurrentUserPayload } from '../../common/decorators/current-user.decorator';
 import { AdminGuard } from '../../common/guards/admin.guard';
 import { JwtAuthGuard } from '../../common/guards/jwt.guard';
 import { ReliabilityService } from '../../common/services/reliability.service';
+import { UploadService } from '../../common/services/upload.service';
 import { MatchingService } from '../matching/matching.service';
 import { ListingsService } from '../listings/listings.service';
 import { AdminService } from './admin.service';
@@ -37,6 +43,7 @@ export class AdminController {
     private readonly reliabilityService: ReliabilityService,
     private readonly listingsService: ListingsService,
     private readonly adminService: AdminService,
+    private readonly uploadService: UploadService,
   ) {}
 
   // ─── Stats / Overview ─────────────────────────────────────────────────────────
@@ -276,11 +283,35 @@ export class AdminController {
   }
 
   @Post('push-notifications')
-  createPushNotification(
+  @UseInterceptors(
+    FileInterceptor('image', {
+      storage: memoryStorage(),
+      limits: { fileSize: 5 * 1024 * 1024 },
+      fileFilter: (_req, file, cb) => {
+        if (/^image\/(jpeg|png|webp)$/.test(file.mimetype)) {
+          cb(null, true);
+        } else {
+          cb(new BadRequestException('Only JPEG, PNG, or WebP images are allowed'), false);
+        }
+      },
+    }),
+  )
+  async createPushNotification(
     @CurrentUser() user: CurrentUserPayload,
     @Body() dto: CreatePushNotificationDto,
+    @UploadedFile() file?: Express.Multer.File,
   ) {
-    return this.adminService.createPushNotification(user.id, dto);
+    let payload = dto;
+
+    if (file) {
+      const imageUrl = await this.uploadService.uploadPushNotificationImage(
+        file.buffer,
+        `${user.id}_${Date.now()}`,
+      );
+      payload = { ...dto, imageUrl };
+    }
+
+    return this.adminService.createPushNotification(user.id, payload);
   }
 
   @Patch('push-notifications/:id')
