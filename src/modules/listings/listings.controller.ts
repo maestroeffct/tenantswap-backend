@@ -68,6 +68,12 @@ export class ListingsController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Get(':listingId/near-misses')
+  getNearMisses(@Param('listingId') listingId: string) {
+    return this.listingsService.getNearMisses(listingId);
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Get('demand')
   getDemand(@Query('city') city: string) {
     if (!city) throw new BadRequestException('city is required');

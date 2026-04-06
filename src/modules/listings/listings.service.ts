@@ -485,7 +485,7 @@ export class ListingsService {
   }
 
   async getOverviewStats() {
-    const [totalUsers, listingsByStatus, pendingVerifications] = await Promise.all([
+    const [totalUsers, listingsByStatus, pendingVerifications, viewAgg, demandByCity] = await Promise.all([
       this.prisma.user.count(),
       this.prisma.swapListing.groupBy({
         by: ['status'],
@@ -493,6 +493,14 @@ export class ListingsService {
       }),
       this.prisma.swapListing.count({
         where: { listingType: 'SEEKING', verificationStatus: 'PENDING' },
+      }),
+      this.prisma.swapListing.aggregate({ _sum: { viewCount: true } }),
+      this.prisma.swapListing.groupBy({
+        by: ['desiredCity'],
+        where: { status: 'ACTIVE', desiredCity: { not: '' } },
+        _count: { id: true },
+        orderBy: { _count: { id: 'desc' } },
+        take: 8,
       }),
     ]);
 
@@ -513,6 +521,8 @@ export class ListingsService {
       matchedListings: byStatus['MATCHED'],
       pendingVerifications,
       listingsByStatus: byStatus,
+      totalViews: viewAgg._sum.viewCount ?? 0,
+      topCities: demandByCity.map((r) => ({ city: r.desiredCity, count: r._count.id })),
     };
   }
 
@@ -548,6 +558,107 @@ export class ListingsService {
     });
 
     return rows.map((r) => ({ ...r, listingId: r.id }));
+  }
+
+  async getNearMisses(listingId: string): Promise<{
+    id: string;
+    currentType: string;
+    currentCity: string;
+    currentState: string;
+    currentRent: number;
+    desiredType: string;
+    missReason: 'wrong_type' | 'over_budget' | 'not_available';
+  }[]> {
+    const listing = await this.prisma.swapListing.findUnique({
+      where: { id: listingId },
+      select: {
+        desiredState: true,
+        desiredType: true,
+        maxBudget: true,
+        listingType: true,
+        status: true,
+      },
+    });
+
+    if (!listing || listing.status !== 'ACTIVE') return [];
+    // Seekers with no apartment can't have near-misses in the SWAP sense
+    if (listing.listingType === 'SEEKING') return [];
+
+    const now = new Date();
+    const budgetCeiling = Math.round(listing.maxBudget * 1.3); // within 30% over budget
+
+    const candidates = await this.prisma.swapListing.findMany({
+      where: {
+        id: { not: listingId },
+        status: 'ACTIVE',
+        listingType: 'SWAP',
+        currentState: { equals: listing.desiredState, mode: 'insensitive' },
+        currentRent: { lte: budgetCeiling },
+        OR: [{ expiresAt: null }, { expiresAt: { gte: now } }],
+        AND: [
+          {
+            OR: [
+              { currentAvailableOn: null },
+              { currentAvailableOn: { gte: now } },
+            ],
+          },
+        ],
+      },
+      select: {
+        id: true,
+        currentType: true,
+        currentCity: true,
+        currentState: true,
+        currentRent: true,
+        currentAvailable: true,
+        desiredType: true,
+        maxBudget: true,
+      },
+      take: 5,
+      orderBy: { currentRent: 'asc' },
+    });
+
+    const desiredNorm = listing.desiredType.trim().toLowerCase();
+    const results: {
+      id: string;
+      currentType: string;
+      currentCity: string;
+      currentState: string;
+      currentRent: number;
+      desiredType: string;
+      missReason: 'wrong_type' | 'over_budget' | 'not_available';
+    }[] = [];
+
+    for (const c of candidates) {
+      const typeMatch = c.currentType.trim().toLowerCase() === desiredNorm ||
+        c.currentType.trim().toLowerCase().includes(desiredNorm) ||
+        desiredNorm.includes(c.currentType.trim().toLowerCase());
+      const withinBudget = c.currentRent <= listing.maxBudget;
+      const isAvailable = c.currentAvailable;
+
+      // Must fail at least one criterion to be a near-miss (not a full match)
+      if (typeMatch && withinBudget && isAvailable) continue;
+
+      // Determine the primary miss reason
+      let missReason: 'wrong_type' | 'over_budget' | 'not_available';
+      if (!typeMatch) missReason = 'wrong_type';
+      else if (!withinBudget) missReason = 'over_budget';
+      else missReason = 'not_available';
+
+      results.push({
+        id: c.id,
+        currentType: c.currentType,
+        currentCity: c.currentCity,
+        currentState: c.currentState,
+        currentRent: c.currentRent,
+        desiredType: c.desiredType,
+        missReason,
+      });
+
+      if (results.length >= 3) break;
+    }
+
+    return results;
   }
 
   async getMyListings(userId: string) {

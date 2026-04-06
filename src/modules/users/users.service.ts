@@ -134,11 +134,88 @@ export class UsersService {
       })
       .filter((match): match is NonNullable<typeof match> => match !== null);
 
+    // Near-misses: same state, budget within 30%, fails exactly one criterion
+    const nearMisses = await this.computeNearMisses(listing);
+
     return {
       ...listing,
       matchCount: matches.length,
       matches,
+      nearMisses,
     };
+  }
+
+  private async computeNearMisses(listing: { id: string; [key: string]: unknown }) {
+    const full = await this.prisma.swapListing.findUnique({
+      where: { id: listing.id as string },
+      select: {
+        desiredState: true,
+        desiredType: true,
+        maxBudget: true,
+        listingType: true,
+        status: true,
+      },
+    });
+
+    if (!full || full.status !== 'ACTIVE' || full.listingType === 'SEEKING') return [];
+
+    const now = new Date();
+    const budgetCeiling = Math.round(full.maxBudget * 1.3);
+
+    const candidates = await this.prisma.swapListing.findMany({
+      where: {
+        id: { not: listing.id as string },
+        status: 'ACTIVE',
+        listingType: 'SWAP',
+        currentState: { equals: full.desiredState, mode: 'insensitive' },
+        currentRent: { lte: budgetCeiling },
+        OR: [{ expiresAt: null }, { expiresAt: { gte: now } }],
+        AND: [{ OR: [{ currentAvailableOn: null }, { currentAvailableOn: { gte: now } }] }],
+      },
+      select: {
+        id: true,
+        currentType: true,
+        currentCity: true,
+        currentState: true,
+        currentRent: true,
+        currentAvailable: true,
+        desiredType: true,
+      },
+      take: 10,
+      orderBy: { currentRent: 'asc' },
+    });
+
+    const desiredNorm = full.desiredType.trim().toLowerCase();
+    const results: {
+      id: string;
+      currentType: string;
+      currentCity: string;
+      currentState: string;
+      currentRent: number;
+      desiredType: string;
+      missReason: 'wrong_type' | 'over_budget' | 'not_available';
+    }[] = [];
+
+    for (const c of candidates) {
+      const typeMatch =
+        c.currentType.trim().toLowerCase() === desiredNorm ||
+        c.currentType.trim().toLowerCase().includes(desiredNorm) ||
+        desiredNorm.includes(c.currentType.trim().toLowerCase());
+      const withinBudget = c.currentRent <= full.maxBudget;
+      const isAvailable = c.currentAvailable;
+
+      if (typeMatch && withinBudget && isAvailable) continue;
+
+      let missReason: 'wrong_type' | 'over_budget' | 'not_available';
+      if (!typeMatch) missReason = 'wrong_type';
+      else if (!withinBudget) missReason = 'over_budget';
+      else missReason = 'not_available';
+
+      results.push({ id: c.id, currentType: c.currentType, currentCity: c.currentCity, currentState: c.currentState, currentRent: c.currentRent, desiredType: c.desiredType, missReason });
+      if (results.length >= 3) break;
+    }
+
+    return results;
   }
 
   async updateProfile(userId: string, dto: UpdateProfileDto) {

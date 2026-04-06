@@ -787,6 +787,41 @@ export class MatchingService {
           notified += 1;
         }
 
+        // Near-miss notification — when no full matches but close candidates exist
+        if (recommendationCount === 0) {
+          const nearMisses = await this.computeNearMissesForSweep(listing.id);
+          if (nearMisses.length > 0) {
+            const top = nearMisses[0];
+            const missMsg = top.missReason === 'wrong_type'
+              ? `Someone in ${top.currentCity} is looking for what you have — they need a ${top.desiredType}, you have a ${top.currentType}.`
+              : top.missReason === 'over_budget'
+              ? `Someone in ${top.currentCity} is interested in your area — their budget is slightly below your rent.`
+              : `Someone in ${top.currentCity} matches your area — their apartment isn't available yet.`;
+
+            // Only send once per listing per day
+            const alreadySentToday = await this.prisma.userNotification.findFirst({
+              where: {
+                userId: listing.userId,
+                type: 'NEAR_MISS',
+                createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+                payload: { path: ['listingId'], equals: listing.id },
+              },
+              select: { id: true },
+            });
+
+            if (!alreadySentToday) {
+              await this.notificationService.notifyMany([{
+                userId: listing.userId,
+                type: 'NEAR_MISS',
+                title: 'Almost a Match',
+                message: missMsg,
+                channels: ['IN_APP'],
+                payload: { listingId: listing.id, missReason: top.missReason, city: top.currentCity },
+              }]);
+            }
+          }
+        }
+
         await this.prisma.swapListing.update({
           where: { id: listing.id },
           data: {
@@ -819,6 +854,55 @@ export class MatchingService {
       notified,
       failed,
     };
+  }
+
+  private async computeNearMissesForSweep(listingId: string): Promise<{
+    currentType: string;
+    currentCity: string;
+    currentRent: number;
+    desiredType: string;
+    missReason: 'wrong_type' | 'over_budget' | 'not_available';
+  }[]> {
+    const listing = await this.prisma.swapListing.findUnique({
+      where: { id: listingId },
+      select: { desiredState: true, desiredType: true, maxBudget: true, listingType: true, status: true },
+    });
+    if (!listing || listing.status !== 'ACTIVE' || listing.listingType === 'SEEKING') return [];
+
+    const now = new Date();
+    const budgetCeiling = Math.round(listing.maxBudget * 1.3);
+
+    const candidates = await this.prisma.swapListing.findMany({
+      where: {
+        id: { not: listingId },
+        status: 'ACTIVE',
+        listingType: 'SWAP',
+        currentState: { equals: listing.desiredState, mode: 'insensitive' },
+        currentRent: { lte: budgetCeiling },
+        OR: [{ expiresAt: null }, { expiresAt: { gte: now } }],
+        AND: [{ OR: [{ currentAvailableOn: null }, { currentAvailableOn: { gte: now } }] }],
+      },
+      select: { id: true, currentType: true, currentCity: true, currentRent: true, currentAvailable: true, desiredType: true },
+      take: 10,
+      orderBy: { currentRent: 'asc' },
+    });
+
+    const desiredNorm = listing.desiredType.trim().toLowerCase();
+    const results: { currentType: string; currentCity: string; currentRent: number; desiredType: string; missReason: 'wrong_type' | 'over_budget' | 'not_available' }[] = [];
+
+    for (const c of candidates) {
+      const typeMatch = c.currentType.trim().toLowerCase() === desiredNorm ||
+        c.currentType.trim().toLowerCase().includes(desiredNorm) ||
+        desiredNorm.includes(c.currentType.trim().toLowerCase());
+      const withinBudget = c.currentRent <= listing.maxBudget;
+      const isAvailable = c.currentAvailable;
+      if (typeMatch && withinBudget && isAvailable) continue;
+      const missReason: 'wrong_type' | 'over_budget' | 'not_available' = !typeMatch ? 'wrong_type' : !withinBudget ? 'over_budget' : 'not_available';
+      results.push({ currentType: c.currentType, currentCity: c.currentCity, currentRent: c.currentRent, desiredType: c.desiredType, missReason });
+      if (results.length >= 3) break;
+    }
+
+    return results;
   }
 
   private async breakChainAndRecover(
