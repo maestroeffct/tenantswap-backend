@@ -188,6 +188,14 @@ export class ListingsService {
   }
 
   async createListing(userId: string, dto: CreateListingDto) {
+    // Enforce hard limit of 2 listings per user
+    const listingCount = await this.prisma.swapListing.count({ where: { userId } });
+    if (listingCount >= 2) {
+      throw new BadRequestException(
+        'You have reached the maximum of 2 listings. Please close an existing listing before creating a new one.',
+      );
+    }
+
     const listingType = dto.listingType ?? 'SWAP';
     const isSeeking = listingType === 'SEEKING';
 
