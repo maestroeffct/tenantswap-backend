@@ -316,6 +316,13 @@ export class AdminService {
     return { message: 'Listing closed by admin', listing: updated };
   }
 
+  async deleteListingByAdmin(listingId: string) {
+    const listing = await this.prisma.swapListing.findUnique({ where: { id: listingId }, select: { id: true } });
+    if (!listing) throw new NotFoundException('Listing not found');
+    await this.prisma.swapListing.delete({ where: { id: listingId } });
+    return { success: true };
+  }
+
   // ─── Chains ───────────────────────────────────────────────────────────────────
 
   async listChains(opts: {
@@ -922,6 +929,32 @@ export class AdminService {
     if (!vacancy) throw new NotFoundException('Vacancy not found');
     await this.prisma.vacancyAlert.delete({ where: { id: vacancyId } });
     return { success: true };
+  }
+
+  async createVacancy(adminId: string, dto: {
+    userId?: string;
+    apartmentType: string;
+    state: string;
+    city: string;
+    area?: string | null;
+    features: string[];
+  }) {
+    const ownerId = dto.userId ?? adminId;
+    const user = await this.prisma.user.findUnique({ where: { id: ownerId }, select: { id: true } });
+    if (!user) throw new NotFoundException('User not found');
+
+    const vacancy = await this.prisma.vacancyAlert.create({
+      data: {
+        userId: ownerId,
+        apartmentType: dto.apartmentType,
+        state: dto.state,
+        city: dto.city,
+        area: dto.area?.trim() || null,
+        features: dto.features,
+      },
+    });
+
+    return { message: 'Vacancy created', vacancy };
   }
 
   // ─── Create User (Admin) ──────────────────────────────────────────────────────

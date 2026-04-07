@@ -1,8 +1,9 @@
 import { IsArray, IsBoolean, IsIn, IsNumber, IsOptional, IsString } from 'class-validator';
 
 export class CreateListingDto {
+  @IsOptional()
   @IsString()
-  userId: string;
+  userId?: string;
 
   @IsIn(['SWAP', 'SEEKING'])
   listingType: string;

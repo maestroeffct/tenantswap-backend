@@ -193,6 +193,11 @@ export class AdminController {
     return this.adminService.closeListingByAdmin(user.id, listingId, dto.reason);
   }
 
+  @Delete('listings/:listingId')
+  deleteListing(@Param('listingId') listingId: string) {
+    return this.adminService.deleteListingByAdmin(listingId);
+  }
+
   // ─── Chains ───────────────────────────────────────────────────────────────────
 
   @Get('chains')
@@ -356,6 +361,14 @@ export class AdminController {
     });
   }
 
+  @Post('vacancies')
+  createVacancy(
+    @CurrentUser() user: CurrentUserPayload,
+    @Body() dto: { userId?: string; apartmentType: string; state: string; city: string; area?: string; features?: string[] },
+  ) {
+    return this.adminService.createVacancy(user.id, { ...dto, features: dto.features ?? [] });
+  }
+
   @Delete('vacancies/:vacancyId')
   deleteVacancy(@Param('vacancyId') vacancyId: string) {
     return this.adminService.deleteVacancy(vacancyId);
@@ -369,8 +382,12 @@ export class AdminController {
   }
 
   @Post('listings/create')
-  createListing(@Body() dto: CreateListingDto) {
-    return this.adminService.createListing(dto);
+  createListing(
+    @CurrentUser() user: CurrentUserPayload,
+    @Body() dto: CreateListingDto,
+  ) {
+    // If no userId specified, use the admin's own account
+    return this.adminService.createListing({ ...dto, userId: dto.userId || user.id });
   }
 
   // ─── Staff Management ─────────────────────────────────────────────────────────
