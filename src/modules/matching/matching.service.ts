@@ -1935,6 +1935,7 @@ export class MatchingService {
     targetListingId: string,
     requesterUserId: string,
     requesterListingId?: string,
+    skipAvailabilityCheck = false,
   ) {
     await this.sweepLifecycle();
 
@@ -1961,7 +1962,9 @@ export class MatchingService {
       throw new BadRequestException('Target listing is no longer active');
     }
 
-    if (!targetListing.currentAvailable) {
+    // Skip availability check for vacancy-based connects — the vacancy poster is
+    // signalling knowledge of an available apartment, not offering their own listing
+    if (!skipAvailabilityCheck && !targetListing.currentAvailable) {
       throw new BadRequestException('Target listing is not currently available');
     }
 

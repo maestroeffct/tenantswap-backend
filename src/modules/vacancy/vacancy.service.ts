@@ -157,8 +157,9 @@ export class VacancyService {
       throw new BadRequestException('This user no longer has an active listing');
     }
 
-    // Delegate to the full requestInterest flow — handles upsert, SSE, notifications to both parties
-    return this.matchingService.requestInterest(ownerListing.id, viewerUserId);
+    // Delegate to the full requestInterest flow — skip availability check because
+    // the vacancy poster is sharing knowledge of an available apartment, not their own listing
+    return this.matchingService.requestInterest(ownerListing.id, viewerUserId, undefined, true);
   }
 
   private async notifyRecipients(input: {
