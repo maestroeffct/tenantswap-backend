@@ -480,6 +480,7 @@ export class UsersService {
         workplaceArea: true,
         workplaceCity: true,
         workplaceState: true,
+        contactsUnlocked: true,
         createdAt: true,
       },
     });

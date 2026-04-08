@@ -51,6 +51,7 @@ model User {
   workplaceState              String?
   nin                         String?
   ninVerifiedAt               DateTime?
+  contactsUnlocked            Int                @default(0)
   createdAt                   DateTime           @default(now())
 
   listings            SwapListing[]

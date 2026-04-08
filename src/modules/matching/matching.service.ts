@@ -2436,13 +2436,17 @@ export class MatchingService {
       );
     }
 
-    const updated = await this.prisma.listingInterest.update({
-      where: { id: interest.id },
-      data: {
-        status: 'CONTACT_APPROVED',
-        respondedAt: new Date(),
-      },
-    });
+    const [updated] = await this.prisma.$transaction([
+      this.prisma.listingInterest.update({
+        where: { id: interest.id },
+        data: { status: 'CONTACT_APPROVED', respondedAt: new Date() },
+      }),
+      // Increment the requester's unlocked contact count (Option 1: initiator only)
+      this.prisma.user.update({
+        where: { id: interest.requesterUserId },
+        data: { contactsUnlocked: { increment: 1 } },
+      }),
+    ]);
 
     await this.notificationService.notifyMany([
       {
