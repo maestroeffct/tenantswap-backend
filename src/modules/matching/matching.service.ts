@@ -294,13 +294,9 @@ export class MatchingService {
     return 0;
   }
 
-  private computeBudgetScore(maxBudget: number, currentRent: number) {
-    if (maxBudget <= 0 || currentRent <= 0) return 0;
-    if (maxBudget < currentRent) return 0;
-
-    const ratio = currentRent / maxBudget;
-    const score = Math.round(25 * (1 - ratio));
-    return Math.max(0, Math.min(25, score));
+  private computeBudgetScore(_maxBudget: number, _currentRent: number) {
+    // Budget is not a matching factor — apartment type and location decide matches
+    return 0;
   }
 
   private computeTimelineScore(a: ListingNode, b: ListingNode) {
@@ -425,7 +421,7 @@ export class MatchingService {
     const typeScore = this.computeTypeScore(a.desiredType, b.currentType);
     if (typeScore === 0) return false;
 
-    return b.currentAvailable && a.maxBudget >= b.currentRent;
+    return b.currentAvailable;
   }
 
   private recommendationStats(recommendations: Recommendation[]) {
