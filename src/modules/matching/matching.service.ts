@@ -1937,6 +1937,7 @@ export class MatchingService {
     requesterListingId?: string,
     skipAvailabilityCheck = false,
     skipRequesterChecks = false,
+    skipTargetStatusCheck = false,
   ) {
     await this.sweepLifecycle();
 
@@ -1959,7 +1960,7 @@ export class MatchingService {
       throw new BadRequestException('Target listing not found');
     }
 
-    if (targetListing.status !== 'ACTIVE') {
+    if (!skipTargetStatusCheck && targetListing.status !== 'ACTIVE') {
       throw new BadRequestException('Target listing is no longer active');
     }
 
@@ -1970,6 +1971,7 @@ export class MatchingService {
     }
 
     if (
+      !skipTargetStatusCheck &&
       targetListing.expiresAt &&
       targetListing.expiresAt.getTime() < now.getTime()
     ) {

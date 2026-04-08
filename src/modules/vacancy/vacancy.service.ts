@@ -146,21 +146,22 @@ export class VacancyService {
       throw new BadRequestException('You cannot connect to your own vacancy');
     }
 
-    // Find owner's active listing (target)
+    // Find owner's most recent listing — any status — vacancy posters don't need an active swap
     const ownerListing = await this.prisma.swapListing.findFirst({
-      where: { userId: vacancy.userId, status: 'ACTIVE' },
+      where: { userId: vacancy.userId },
       orderBy: { createdAt: 'desc' },
       select: { id: true },
     });
 
     if (!ownerListing) {
-      throw new BadRequestException('This user no longer has an active listing');
+      throw new BadRequestException('This person has not created a listing yet. Try again later.');
     }
 
-    // Delegate to the full requestInterest flow — skip both availability checks:
-    // - target: the vacancy poster signals an available apartment, not their own listing
-    // - requester: the viewer may have an expired or unavailable listing but still needs housing
-    return this.matchingService.requestInterest(ownerListing.id, viewerUserId, undefined, true, true);
+    // Delegate to the full requestInterest flow — skip all status/availability checks:
+    // - target status: vacancy poster may have a closed/expired listing, that's OK
+    // - target availability: the vacancy signal is independent of their listing availability
+    // - requester checks: viewer may have an expired or unavailable listing but still needs housing
+    return this.matchingService.requestInterest(ownerListing.id, viewerUserId, undefined, true, true, true);
   }
 
   private async notifyRecipients(input: {
