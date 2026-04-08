@@ -2116,7 +2116,9 @@ export class MatchingService {
       verificationStatus: targetListing.verificationStatus as string | null,
     };
 
-    if (!this.isEdgeCompatible(requesterNode, targetNode)) {
+    // Vacancy-based connects skip swap compatibility — the requester is expressing
+    // interest in a vacancy tip, not proposing a swap
+    if (!skipTargetStatusCheck && !this.isEdgeCompatible(requesterNode, targetNode)) {
       throw new BadRequestException(
         'Your current active listing is not compatible with this apartment request',
       );
