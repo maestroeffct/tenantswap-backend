@@ -765,7 +765,8 @@ export class AdminService {
 
     // If not scheduled, send immediately
     if (!isScheduled) {
-      await this._dispatchPushNotification(record.id);
+      const result = await this._dispatchPushNotification(record.id);
+      return { ...record, status: 'SENT', recipientCount: result?.recipientCount ?? 0 };
     }
 
     return record;

@@ -36,6 +36,10 @@ export class PushService implements OnModuleInit {
     this.logger.log(`Firebase Admin initialized project=${projectId}`);
   }
 
+  private get frontendUrl(): string {
+    return (this.config.get<string>('FRONTEND_URL') ?? 'https://tenantswap.africa').replace(/\/$/, '');
+  }
+
   async sendPush(input: {
     token: string;
     title: string;
@@ -46,6 +50,8 @@ export class PushService implements OnModuleInit {
       this.logger.warn('[PUSH_SKIPPED] FCM not configured');
       return false;
     }
+
+    const base = this.frontendUrl;
 
     try {
       const messageId = await admin.messaging(this.app).send({
@@ -59,11 +65,11 @@ export class PushService implements OnModuleInit {
           notification: {
             title: input.title,
             body: input.body,
-            icon: '/assets/TenantSwap Logo.png',
-            badge: '/assets/TenantSwap Logo Monochrome.png',
+            icon: `${base}/assets/TenantSwap Logo.png`,
+            badge: `${base}/assets/TenantSwap Logo Monochrome.png`,
           },
           fcmOptions: {
-            link: '/dashboard',
+            link: `${base}/dashboard`,
           },
         },
       });
