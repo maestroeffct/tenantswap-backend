@@ -157,9 +157,10 @@ export class VacancyService {
       throw new BadRequestException('This user no longer has an active listing');
     }
 
-    // Delegate to the full requestInterest flow — skip availability check because
-    // the vacancy poster is sharing knowledge of an available apartment, not their own listing
-    return this.matchingService.requestInterest(ownerListing.id, viewerUserId, undefined, true);
+    // Delegate to the full requestInterest flow — skip both availability checks:
+    // - target: the vacancy poster signals an available apartment, not their own listing
+    // - requester: the viewer may have an expired or unavailable listing but still needs housing
+    return this.matchingService.requestInterest(ownerListing.id, viewerUserId, undefined, true, true);
   }
 
   private async notifyRecipients(input: {

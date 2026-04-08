@@ -1936,6 +1936,7 @@ export class MatchingService {
     requesterUserId: string,
     requesterListingId?: string,
     skipAvailabilityCheck = false,
+    skipRequesterChecks = false,
   ) {
     await this.sweepLifecycle();
 
@@ -2013,12 +2014,14 @@ export class MatchingService {
 
     const requesterListing = requesterListingId
       ? await this.prisma.swapListing.findFirst({
-          where: {
-            id: requesterListingId,
-            userId: requesterUserId,
-            status: 'ACTIVE',
-            OR: [{ expiresAt: null }, { expiresAt: { gte: now } }],
-          },
+          where: skipRequesterChecks
+            ? { id: requesterListingId, userId: requesterUserId }
+            : {
+                id: requesterListingId,
+                userId: requesterUserId,
+                status: 'ACTIVE',
+                OR: [{ expiresAt: null }, { expiresAt: { gte: now } }],
+              },
           include: {
             user: {
               select: {
@@ -2030,11 +2033,13 @@ export class MatchingService {
           },
         })
       : await this.prisma.swapListing.findFirst({
-          where: {
-            userId: requesterUserId,
-            status: 'ACTIVE',
-            OR: [{ expiresAt: null }, { expiresAt: { gte: now } }],
-          },
+          where: skipRequesterChecks
+            ? { userId: requesterUserId }
+            : {
+                userId: requesterUserId,
+                status: 'ACTIVE',
+                OR: [{ expiresAt: null }, { expiresAt: { gte: now } }],
+              },
           orderBy: { createdAt: 'desc' },
           include: {
             user: {
@@ -2053,7 +2058,7 @@ export class MatchingService {
       );
     }
 
-    if (!requesterListing.currentAvailable) {
+    if (!skipRequesterChecks && !requesterListing.currentAvailable) {
       throw new BadRequestException('Your listing is marked unavailable for matching');
     }
 
