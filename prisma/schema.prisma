@@ -61,6 +61,8 @@ model User {
   interestsRequested  ListingInterest[]    @relation("UserRequestedInterests")
   paymentTransactions PaymentTransaction[]
   reliabilityEvents   ReliabilityEvent[]
+  reportsSubmitted    UserReport[]         @relation("ReportsSubmitted")
+  reportsReceived     UserReport[]         @relation("ReportsReceived")
 
   @@unique([oauthProvider, oauthProviderUserId])
   @@index([emailVerificationTokenHash])
@@ -459,4 +461,37 @@ model UserNotification {
 
   @@index([userId, createdAt])
   @@index([chainId])
+}
+
+enum ReportReason {
+  AGENT_SUSPECTED
+  FAKE_LISTING
+  HARASSMENT
+  SCAM
+  OTHER
+}
+
+enum ReportStatus {
+  PENDING
+  REVIEWED
+  DISMISSED
+}
+
+model UserReport {
+  id             String       @id @default(uuid())
+  reporterId     String
+  reportedUserId String
+  reason         ReportReason
+  details        String?
+  status         ReportStatus @default(PENDING)
+  reviewedAt     DateTime?
+  reviewedBy     String?
+  createdAt      DateTime     @default(now())
+
+  reporter     User @relation("ReportsSubmitted", fields: [reporterId], references: [id])
+  reportedUser User @relation("ReportsReceived", fields: [reportedUserId], references: [id])
+
+  @@unique([reporterId, reportedUserId])
+  @@index([reportedUserId, createdAt])
+  @@index([status, createdAt])
 }

@@ -357,6 +357,30 @@ export class AdminController {
     return this.adminService.sendPushToUser(dto.userId, dto.title, dto.body);
   }
 
+  // ─── Reports ─────────────────────────────────────────────────────────────────
+
+  @Get('reports')
+  listReports(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('status') status?: string,
+  ) {
+    return this.adminService.listReports({
+      page: page ? Number(page) : undefined,
+      limit: limit ? Number(limit) : undefined,
+      status,
+    });
+  }
+
+  @Patch('reports/:reportId/review')
+  reviewReport(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param('reportId') reportId: string,
+    @Body() body: { action: 'REVIEWED' | 'DISMISSED' },
+  ) {
+    return this.adminService.reviewReport(reportId, user.id, body.action);
+  }
+
   // ─── Vacancies (Admin) ────────────────────────────────────────────────────────
 
   @Get('vacancies')

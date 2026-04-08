@@ -1080,6 +1080,49 @@ export class AdminService {
     return { items: staff, meta: { total, page, limit, pages: Math.ceil(total / limit) } };
   }
 
+  // ─── Reports ─────────────────────────────────────────────────────────────────
+
+  async listReports(opts: { page?: number; limit?: number; status?: string }) {
+    const page = Math.max(1, opts.page ?? 1);
+    const limit = Math.min(100, Math.max(1, opts.limit ?? 20));
+    const skip = (page - 1) * limit;
+
+    const where: any = {};
+    if (opts.status) where.status = opts.status;
+
+    const [total, reports] = await Promise.all([
+      this.prisma.userReport.count({ where }),
+      this.prisma.userReport.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          reason: true,
+          details: true,
+          status: true,
+          createdAt: true,
+          reviewedAt: true,
+          reporter: { select: { id: true, fullName: true, phone: true } },
+          reportedUser: { select: { id: true, fullName: true, phone: true, reliabilityScore: true, blockedUntil: true } },
+        },
+      }),
+    ]);
+
+    return { items: reports, meta: { total, page, limit, pages: Math.ceil(total / limit) } };
+  }
+
+  async reviewReport(reportId: string, adminId: string, action: 'REVIEWED' | 'DISMISSED') {
+    const report = await this.prisma.userReport.findUnique({ where: { id: reportId } });
+    if (!report) throw new Error('Report not found');
+
+    return this.prisma.userReport.update({
+      where: { id: reportId },
+      data: { status: action, reviewedAt: new Date(), reviewedBy: adminId },
+    });
+  }
+
   // ─── Caretakers ──────────────────────────────────────────────────────────────
 
   async listCaretakers(opts: { page?: number; limit?: number; search?: string }) {

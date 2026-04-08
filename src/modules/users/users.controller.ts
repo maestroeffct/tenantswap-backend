@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Patch, Post, UploadedFile, UseGuards, UseInterceptors, HttpCode, HttpStatus } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Param, Patch, Post, UploadedFile, UseGuards, UseInterceptors, HttpCode, HttpStatus } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 
@@ -10,6 +10,7 @@ import { UploadService } from '../../common/services/upload.service';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { SubmitNinDto } from './dto/submit-nin.dto';
+import { ReportUserDto } from './dto/report-user.dto';
 import { UsersService } from './users.service';
 
 @Controller('users')
@@ -98,5 +99,16 @@ export class UsersController {
   @HttpCode(HttpStatus.OK)
   dismissCaretakerPrompt(@CurrentUser() user: CurrentUserPayload) {
     return this.usersService.dismissCaretakerPrompt(user.id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post(':userId/report')
+  @HttpCode(HttpStatus.OK)
+  reportUser(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param('userId') reportedUserId: string,
+    @Body() dto: ReportUserDto,
+  ) {
+    return this.usersService.reportUser(user.id, reportedUserId, dto);
   }
 }

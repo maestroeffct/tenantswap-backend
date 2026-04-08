@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -12,6 +13,7 @@ import { createHash, randomBytes } from 'crypto';
 import { PrismaService } from '../../common/prisma.service';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import { ReportUserDto } from './dto/report-user.dto';
 
 @Injectable()
 export class UsersService {
@@ -556,5 +558,54 @@ export class UsersService {
     });
 
     return { message: 'NIN submitted successfully. Verification is pending.' };
+  }
+
+  async reportUser(reporterId: string, reportedUserId: string, dto: ReportUserDto) {
+    if (reporterId === reportedUserId) {
+      throw new BadRequestException('You cannot report yourself.');
+    }
+
+    const reported = await this.prisma.user.findUnique({ where: { id: reportedUserId }, select: { id: true } });
+    if (!reported) throw new NotFoundException('User not found.');
+
+    // One report per reporter-reportedUser pair (upsert so they can update their reason)
+    await this.prisma.userReport.upsert({
+      where: { reporterId_reportedUserId: { reporterId, reportedUserId } },
+      create: {
+        reporterId,
+        reportedUserId,
+        reason: dto.reason as any,
+        details: dto.details ?? null,
+        status: 'PENDING',
+      },
+      update: {
+        reason: dto.reason as any,
+        details: dto.details ?? null,
+        status: 'PENDING',
+      },
+    });
+
+    // Auto-flag: if 3+ PENDING reports against the same user, apply a reliability penalty
+    const pendingCount = await this.prisma.userReport.count({
+      where: { reportedUserId, status: 'PENDING' },
+    });
+
+    if (pendingCount >= 3) {
+      await this.prisma.reliabilityEvent.create({
+        data: {
+          userId: reportedUserId,
+          actorUserId: null,
+          eventType: 'MANUAL_PENALTY',
+          scoreDelta: -20,
+          reason: `Auto-flagged: ${pendingCount} user reports received`,
+        },
+      });
+      await this.prisma.user.update({
+        where: { id: reportedUserId },
+        data: { reliabilityScore: { decrement: 20 } },
+      });
+    }
+
+    return { success: true };
   }
 }
