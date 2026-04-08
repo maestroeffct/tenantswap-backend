@@ -1079,4 +1079,52 @@ export class AdminService {
 
     return { items: staff, meta: { total, page, limit, pages: Math.ceil(total / limit) } };
   }
+
+  // ─── Caretakers ──────────────────────────────────────────────────────────────
+
+  async listCaretakers(opts: { page?: number; limit?: number; search?: string }) {
+    const page = Math.max(1, opts.page ?? 1);
+    const limit = Math.min(100, Math.max(1, opts.limit ?? 20));
+    const skip = (page - 1) * limit;
+
+    const where: any = {
+      caretakerName: { not: null },
+      caretakerPhone: { not: null },
+    };
+
+    if (opts.search) {
+      const q = opts.search.trim();
+      where.OR = [
+        { caretakerName: { contains: q, mode: 'insensitive' } },
+        { caretakerPhone: { contains: q, mode: 'insensitive' } },
+        { user: { fullName: { contains: q, mode: 'insensitive' } } },
+      ];
+    }
+
+    const [total, listings] = await Promise.all([
+      this.prisma.swapListing.count({ where }),
+      this.prisma.swapListing.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          caretakerName: true,
+          caretakerPhone: true,
+          currentType: true,
+          currentCity: true,
+          currentState: true,
+          currentArea: true,
+          status: true,
+          createdAt: true,
+          user: {
+            select: { id: true, fullName: true, phone: true, email: true },
+          },
+        },
+      }),
+    ]);
+
+    return { items: listings, meta: { total, page, limit, pages: Math.ceil(total / limit) } };
+  }
 }

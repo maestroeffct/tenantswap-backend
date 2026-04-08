@@ -21,6 +21,7 @@ import { SubscriptionGuard } from '../../common/guards/subscription.guard';
 import { ReliabilityGuard } from '../../common/guards/reliability.guard';
 import { CreateListingDto } from './dto/create-listing.dto';
 import { UpdateListingDto } from './dto/update-listing.dto';
+import { SubmitCaretakerDto } from './dto/submit-caretaker.dto';
 import { ListingsService } from './listings.service';
 
 @Controller('listings')
@@ -59,6 +60,16 @@ export class ListingsController {
   @Get('me')
   getMine(@CurrentUser() user: CurrentUserPayload) {
     return this.listingsService.getMyListings(user.id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Patch(':listingId/caretaker')
+  submitCaretaker(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param('listingId') listingId: string,
+    @Body() dto: SubmitCaretakerDto,
+  ) {
+    return this.listingsService.submitCaretakerContact(user.id, listingId, dto);
   }
 
   @UseGuards(JwtAuthGuard)

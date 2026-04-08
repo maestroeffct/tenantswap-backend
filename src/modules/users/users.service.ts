@@ -528,6 +528,14 @@ export class UsersService {
     return { profilePhotoUrl: url };
   }
 
+  async dismissCaretakerPrompt(userId: string) {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { caretakerPromptDismissedAt: new Date() },
+    });
+    return { message: 'Preference saved.' };
+  }
+
   async submitNin(userId: string, nin: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },

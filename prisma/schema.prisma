@@ -52,6 +52,7 @@ model User {
   nin                         String?
   ninVerifiedAt               DateTime?
   contactsUnlocked            Int                @default(0)
+  caretakerPromptDismissedAt  DateTime?
   createdAt                   DateTime           @default(now())
 
   listings            SwapListing[]
@@ -111,6 +112,9 @@ model SwapListing {
   lastRecommendationCount Int       @default(0)
   autoSearchLastRunAt     DateTime?
   autoSearchMatchedAt     DateTime?
+
+  caretakerName  String?
+  caretakerPhone String?
 
   viewCount Int      @default(0)
   createdAt DateTime @default(now())

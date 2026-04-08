@@ -58,6 +58,21 @@ export class AdminController {
     return this.adminService.getNearMissBreakdown();
   }
 
+  // ─── Caretakers ──────────────────────────────────────────────────────────────
+
+  @Get('caretakers')
+  listCaretakers(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('search') search?: string,
+  ) {
+    return this.adminService.listCaretakers({
+      page: page ? Number(page) : undefined,
+      limit: limit ? Number(limit) : undefined,
+      search,
+    });
+  }
+
   // ─── Verifications ────────────────────────────────────────────────────────────
 
   @Get('verifications/pending')

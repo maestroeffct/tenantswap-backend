@@ -686,6 +686,23 @@ export class ListingsService {
     `;
   }
 
+  async submitCaretakerContact(userId: string, listingId: string, data: { caretakerName: string; caretakerPhone: string }) {
+    const listing = await this.prisma.swapListing.findFirst({
+      where: { id: listingId, userId },
+    });
+
+    if (!listing) {
+      throw new NotFoundException('Listing not found');
+    }
+
+    await this.prisma.swapListing.update({
+      where: { id: listingId },
+      data: { caretakerName: data.caretakerName.trim(), caretakerPhone: data.caretakerPhone.trim() },
+    });
+
+    return { message: 'Caretaker contact saved. Thank you!' };
+  }
+
   async getDemandByCity(city: string): Promise<{ count: number }> {
     const count = await this.prisma.swapListing.count({
       where: {

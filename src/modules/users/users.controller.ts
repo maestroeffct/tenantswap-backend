@@ -92,4 +92,11 @@ export class UsersController {
   ) {
     return this.usersService.submitNin(user.id, dto.nin);
   }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('me/caretaker-prompt/dismiss')
+  @HttpCode(HttpStatus.OK)
+  dismissCaretakerPrompt(@CurrentUser() user: CurrentUserPayload) {
+    return this.usersService.dismissCaretakerPrompt(user.id);
+  }
 }
