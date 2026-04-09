@@ -1497,6 +1497,7 @@ export class MatchingService {
         currentAvailable: true,
         currentAvailableOn: true,
         features: true,
+        listingType: true,
       },
     });
 
