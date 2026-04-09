@@ -11,7 +11,7 @@ import { UpdateListingDto } from './dto/update-listing.dto';
 import { VerifyListingDto } from './dto/verify-listing.dto';
 
 // Document-based seeker categories that require admin review
-const DOCUMENT_SEEKER_CATEGORIES = ['NYSC', 'WORK', 'SCHOOL'] as const;
+const DOCUMENT_SEEKER_CATEGORIES = ['NYSC', 'WORK', 'SCHOOL', 'OTHER'] as const;
 
 @Injectable()
 export class ListingsService {
