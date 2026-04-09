@@ -8,6 +8,7 @@ import { UploadService } from '../../common/services/upload.service';
 import { SubscriptionGuard } from '../../common/guards/subscription.guard';
 import { ReliabilityGuard } from '../../common/guards/reliability.guard';
 import { ReliabilityService } from '../../common/services/reliability.service';
+import { SystemSettingsService } from '../../common/services/system-settings.service';
 import { ListingsController } from './listings.controller';
 import { ListingsService } from './listings.service';
 
@@ -21,6 +22,7 @@ import { ListingsService } from './listings.service';
     SubscriptionGuard,
     ReliabilityGuard,
     ReliabilityService,
+    SystemSettingsService,
   ],
   exports: [ListingsService],
 })

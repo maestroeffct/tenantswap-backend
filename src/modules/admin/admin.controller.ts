@@ -34,6 +34,8 @@ import { SendToUserDto } from './dto/send-to-user.dto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { CreateListingDto } from './dto/create-listing.dto';
 import { VerifyListingDto } from '../listings/dto/verify-listing.dto';
+import { UpdateSettingsDto } from './dto/update-settings.dto';
+import { SystemSettingsService, SETTINGS_KEYS } from '../../common/services/system-settings.service';
 
 @Controller('admin')
 @UseGuards(JwtAuthGuard, AdminGuard)
@@ -44,7 +46,42 @@ export class AdminController {
     private readonly listingsService: ListingsService,
     private readonly adminService: AdminService,
     private readonly uploadService: UploadService,
+    private readonly systemSettings: SystemSettingsService,
   ) {}
+
+  // ─── System Settings ──────────────────────────────────────────────────────────
+
+  @Get('settings')
+  async getSettings() {
+    const all = await this.systemSettings.getAll();
+    return {
+      subscriptionEnforcement: all[SETTINGS_KEYS.SUBSCRIPTION_ENFORCEMENT] === 'true',
+      paymentProvider: all[SETTINGS_KEYS.PAYMENT_PROVIDER],
+      subscriptionAmountMinor: Number(all[SETTINGS_KEYS.SUBSCRIPTION_AMOUNT_MINOR]),
+      subscriptionCurrency: all[SETTINGS_KEYS.SUBSCRIPTION_CURRENCY],
+      subscriptionPlanName: all[SETTINGS_KEYS.SUBSCRIPTION_PLAN_NAME],
+      subscriptionDurationDays: Number(all[SETTINGS_KEYS.SUBSCRIPTION_DURATION_DAYS]),
+    };
+  }
+
+  @Patch('settings')
+  async updateSettings(@Body() dto: UpdateSettingsDto) {
+    const entries: Record<string, string> = {};
+    if (dto.subscriptionEnforcement !== undefined)
+      entries[SETTINGS_KEYS.SUBSCRIPTION_ENFORCEMENT] = String(dto.subscriptionEnforcement);
+    if (dto.paymentProvider !== undefined)
+      entries[SETTINGS_KEYS.PAYMENT_PROVIDER] = dto.paymentProvider;
+    if (dto.subscriptionAmountMinor !== undefined)
+      entries[SETTINGS_KEYS.SUBSCRIPTION_AMOUNT_MINOR] = String(dto.subscriptionAmountMinor);
+    if (dto.subscriptionCurrency !== undefined)
+      entries[SETTINGS_KEYS.SUBSCRIPTION_CURRENCY] = dto.subscriptionCurrency;
+    if (dto.subscriptionPlanName !== undefined)
+      entries[SETTINGS_KEYS.SUBSCRIPTION_PLAN_NAME] = dto.subscriptionPlanName;
+    if (dto.subscriptionDurationDays !== undefined)
+      entries[SETTINGS_KEYS.SUBSCRIPTION_DURATION_DAYS] = String(dto.subscriptionDurationDays);
+    await this.systemSettings.setMany(entries as any);
+    return this.getSettings();
+  }
 
   // ─── Stats / Overview ─────────────────────────────────────────────────────────
 

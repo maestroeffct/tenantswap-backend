@@ -12,6 +12,7 @@ import type {
 } from '@prisma/client';
 
 import { PrismaService } from '../../common/prisma.service';
+import { SystemSettingsService, SETTINGS_KEYS } from '../../common/services/system-settings.service';
 import { CreateCheckoutDto } from './dto/create-checkout.dto';
 import { PaymentWebhookDto } from './dto/payment-webhook.dto';
 
@@ -19,31 +20,33 @@ import { PaymentWebhookDto } from './dto/payment-webhook.dto';
 export class BillingService {
   private readonly logger = new Logger(BillingService.name);
 
-  private readonly enforceSubscription: boolean;
   private readonly testerAllowlist: string[];
-  private readonly paymentProvider: string;
   private readonly webhookSecret: string;
-  private readonly defaultPlan: string;
-  private readonly defaultAmountMinor: number;
-  private readonly defaultDurationDays: number;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly systemSettings: SystemSettingsService,
   ) {
-    this.enforceSubscription =
-      this.config.get<boolean>('SUBSCRIPTION_ENFORCEMENT') ?? false;
     this.testerAllowlist = this.config.get<string[]>('TESTER_ALLOWLIST') ?? [];
-    this.paymentProvider =
-      this.config.get<string>('PAYMENT_PROVIDER')?.toLowerCase() ?? 'manual';
     this.webhookSecret =
       this.config.get<string>('PAYMENT_WEBHOOK_SECRET') ?? 'dev-webhook-secret';
-    this.defaultPlan =
-      this.config.get<string>('SUBSCRIPTION_DEFAULT_PLAN') ?? 'basic_monthly';
-    this.defaultAmountMinor =
-      this.config.get<number>('SUBSCRIPTION_DEFAULT_AMOUNT_MINOR') ?? 5000;
-    this.defaultDurationDays =
-      this.config.get<number>('SUBSCRIPTION_DEFAULT_DURATION_DAYS') ?? 30;
+  }
+
+  private async getPaymentProvider(): Promise<string> {
+    return this.systemSettings.get(SETTINGS_KEYS.PAYMENT_PROVIDER);
+  }
+
+  private async getDefaultAmountMinor(): Promise<number> {
+    return Number(await this.systemSettings.get(SETTINGS_KEYS.SUBSCRIPTION_AMOUNT_MINOR));
+  }
+
+  private async getDefaultPlan(): Promise<string> {
+    return this.systemSettings.get(SETTINGS_KEYS.SUBSCRIPTION_PLAN_NAME);
+  }
+
+  private async getDefaultDurationDays(): Promise<number> {
+    return Number(await this.systemSettings.get(SETTINGS_KEYS.SUBSCRIPTION_DURATION_DAYS));
   }
 
   private normalizePhone(phone: string): string {
@@ -205,14 +208,15 @@ export class BillingService {
       throw new BadRequestException('User not found');
     }
 
+    const enforceSubscription = await this.systemSettings.isSubscriptionEnforced();
     const testerBypass = this.isAllowlisted(user.email, user.phone);
     const hasAccess =
-      !this.enforceSubscription ||
+      !enforceSubscription ||
       testerBypass ||
       this.isSubscriptionActive(user.subscriptionStatus, user.subscriptionExpiresAt);
 
     return {
-      enforcementEnabled: this.enforceSubscription,
+      enforcementEnabled: enforceSubscription,
       testerBypass,
       hasAccess,
       subscription: {
@@ -236,17 +240,24 @@ export class BillingService {
       throw new BadRequestException('User not found');
     }
 
-    const amountMinor = dto.amountMinor ?? this.defaultAmountMinor;
+    const [defaultAmountMinor, defaultPlan, defaultDurationDays, paymentProvider] = await Promise.all([
+      this.getDefaultAmountMinor(),
+      this.getDefaultPlan(),
+      this.getDefaultDurationDays(),
+      this.getPaymentProvider(),
+    ]);
+
+    const amountMinor = dto.amountMinor ?? defaultAmountMinor;
     const currency = dto.currency?.trim().toUpperCase() ?? 'NGN';
-    const planCode = dto.planCode?.trim() || this.defaultPlan;
-    const durationDays = dto.durationDays ?? this.defaultDurationDays;
+    const planCode = dto.planCode?.trim() || defaultPlan;
+    const durationDays = dto.durationDays ?? defaultDurationDays;
 
     const reference = `TS-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
 
     await this.prisma.paymentTransaction.create({
       data: {
         userId: user.id,
-        provider: this.paymentProvider,
+        provider: paymentProvider,
         providerReference: reference,
         amountMinor,
         currency,
@@ -256,14 +267,14 @@ export class BillingService {
     });
 
     this.logger.log(
-      `[CHECKOUT_CREATED] userId=${user.id} provider=${this.paymentProvider} reference=${reference}`,
+      `[CHECKOUT_CREATED] userId=${user.id} provider=${paymentProvider} reference=${reference}`,
     );
 
     return {
       success: true,
       message: 'Checkout initialized',
       checkout: {
-        provider: this.paymentProvider,
+        provider: paymentProvider,
         reference,
         amountMinor,
         currency,
@@ -285,8 +296,9 @@ export class BillingService {
       throw new UnauthorizedException('Invalid webhook signature');
     }
 
+    const defaultProvider = await this.getPaymentProvider();
     const provider =
-      (payload.provider?.trim().toLowerCase() || this.paymentProvider).trim();
+      (payload.provider?.trim().toLowerCase() || defaultProvider).trim();
 
     const existingEvent = await this.prisma.paymentWebhookEvent.findUnique({
       where: {
@@ -334,15 +346,21 @@ export class BillingService {
     const data = payload.data;
     const type = payload.type.trim().toLowerCase();
 
+    const [defaultAmountMinor, defaultPlan, defaultDurationDays] = await Promise.all([
+      this.getDefaultAmountMinor(),
+      this.getDefaultPlan(),
+      this.getDefaultDurationDays(),
+    ]);
+
     const parsedAmount = this.parseIntValue(data.amountMinor);
-    const amountMinor = parsedAmount ?? this.defaultAmountMinor;
+    const amountMinor = parsedAmount ?? defaultAmountMinor;
     const currency = this.resolveCurrency(data.currency);
     const durationDays =
-      this.parseIntValue(data.durationDays) ?? this.defaultDurationDays;
+      this.parseIntValue(data.durationDays) ?? defaultDurationDays;
     const planCode =
       typeof data.planCode === 'string' && data.planCode.trim()
         ? data.planCode.trim()
-        : this.defaultPlan;
+        : defaultPlan;
     const reference =
       typeof data.reference === 'string' && data.reference.trim()
         ? data.reference.trim()

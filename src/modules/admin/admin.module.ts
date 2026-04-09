@@ -5,6 +5,7 @@ import { PrismaService } from '../../common/prisma.service';
 import { ReliabilityService } from '../../common/services/reliability.service';
 import { PushService } from '../../common/services/push.service';
 import { UploadService } from '../../common/services/upload.service';
+import { SystemSettingsService } from '../../common/services/system-settings.service';
 import { MatchingModule } from '../matching/matching.module';
 import { ListingsModule } from '../listings/listings.module';
 import { AdminController } from './admin.controller';
@@ -13,6 +14,7 @@ import { AdminService } from './admin.service';
 @Module({
   imports: [MatchingModule, ListingsModule],
   controllers: [AdminController],
-  providers: [AdminGuard, PrismaService, ReliabilityService, PushService, UploadService, AdminService],
+  providers: [AdminGuard, PrismaService, ReliabilityService, PushService, UploadService, AdminService, SystemSettingsService],
+  exports: [SystemSettingsService],
 })
 export class AdminModule {}

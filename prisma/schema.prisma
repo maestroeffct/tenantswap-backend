@@ -495,3 +495,9 @@ model UserReport {
   @@index([reportedUserId, createdAt])
   @@index([status, createdAt])
 }
+
+model SystemSettings {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}

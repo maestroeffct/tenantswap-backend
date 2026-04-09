@@ -12,6 +12,7 @@ import type { Request } from 'express';
 
 import type { CurrentUserPayload } from '../decorators/current-user.decorator';
 import { PrismaService } from '../prisma.service';
+import { SystemSettingsService } from '../services/system-settings.service';
 
 @Injectable()
 export class SubscriptionGuard implements CanActivate {
@@ -20,6 +21,7 @@ export class SubscriptionGuard implements CanActivate {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly systemSettings: SystemSettingsService,
   ) {}
 
   private normalizePhone(phone: string): string {
@@ -45,7 +47,7 @@ export class SubscriptionGuard implements CanActivate {
   }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const enforce = this.config.get<boolean>('SUBSCRIPTION_ENFORCEMENT');
+    const enforce = await this.systemSettings.isSubscriptionEnforced();
     if (!enforce) {
       return true;
     }
