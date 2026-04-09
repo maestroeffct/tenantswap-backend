@@ -1511,7 +1511,7 @@ export class MatchingService {
       throw new BadRequestException('Listing must be ACTIVE to run matching');
     }
 
-    if (!listing.currentAvailable) {
+    if (listing.listingType !== 'SEEKING' && !listing.currentAvailable) {
       throw new BadRequestException('Listing is marked unavailable for matching');
     }
 
