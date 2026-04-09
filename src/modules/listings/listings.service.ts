@@ -204,8 +204,21 @@ export class ListingsService {
       ? null
       : this.mapCurrentAvailableOn(currentAvailable, dto.currentAvailableOn);
 
+    // If the user already has a previously approved SEEKING listing, skip verification
+    const alreadyVerified = isSeeking
+      ? await this.prisma.swapListing.findFirst({
+          where: {
+            userId,
+            listingType: 'SEEKING',
+            verificationStatus: 'APPROVED',
+          },
+          select: { id: true },
+        }).then(Boolean)
+      : false;
+
     // Determine initial status and verification state
     const needsDocumentVerification =
+      !alreadyVerified &&
       isSeeking &&
       dto.seekerCategory &&
       (DOCUMENT_SEEKER_CATEGORIES as readonly string[]).includes(dto.seekerCategory);
