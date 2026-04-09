@@ -192,7 +192,7 @@ export class VacancyService {
         title: `Possible vacancy in ${locationLabel}`,
         message: `A tenant in ${locationLabel} just reported a possible ${input.vacancy.apartmentType} vacancy.`,
         payload: { vacancyAlertId: input.vacancy.id, apartmentType: input.vacancy.apartmentType, state: input.vacancy.state, city: input.vacancy.city, area: input.vacancy.area, features: input.vacancy.features },
-        channels: ['IN_APP'],
+        channels: ['IN_APP', 'EMAIL'],
       })),
     );
   }
