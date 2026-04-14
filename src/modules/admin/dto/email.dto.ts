@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsBoolean, IsIn, IsEmail } from 'class-validator';
+import { IsString, IsOptional, IsBoolean, IsIn, IsObject, IsArray } from 'class-validator';
 
 export class CreateEmailTemplateDto {
   @IsString() name!: string;
@@ -19,12 +19,14 @@ export class UpdateEmailTemplateDto {
 }
 
 export class SendEmailDto {
-  @IsIn(['user', 'all_users', 'caretakers', 'subscribed', 'unsubscribed'])
-  target!: 'user' | 'all_users' | 'caretakers' | 'subscribed' | 'unsubscribed';
+  @IsIn(['user', 'users', 'all_users', 'caretakers', 'subscribed', 'unsubscribed'])
+  target!: 'user' | 'users' | 'all_users' | 'caretakers' | 'subscribed' | 'unsubscribed';
 
   @IsOptional() @IsString() userId?: string;
+  @IsOptional() @IsArray() @IsString({ each: true }) userIds?: string[];
   @IsOptional() @IsString() templateSlug?: string;
   @IsOptional() @IsString() subject?: string;
   @IsOptional() @IsString() bodyHtml?: string;
   @IsOptional() @IsString() bodyText?: string;
+  @IsOptional() @IsObject() variables?: Record<string, string>;
 }

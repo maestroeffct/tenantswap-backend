@@ -25,6 +25,15 @@ export type SystemEmailInput = {
   actionUrl?: string;
 };
 
+export type AdminTemplateEmailInput = {
+  email: string;
+  subject: string;
+  html: string;
+  text: string;
+  recipientUserId?: string;
+  templateSlug?: string;
+};
+
 export type EmailDispatchResult = {
   delivered: boolean;
   provider: 'smtp' | 'log-only';
@@ -213,8 +222,22 @@ const template = React.createElement(VerifyEmail, {
     });
   }
 
+  async sendAdminTemplateEmail(
+    input: AdminTemplateEmailInput,
+  ): Promise<EmailDispatchResult> {
+    return this.dispatchEmail({
+      type: 'campaign',
+      to: input.email,
+      subject: input.subject,
+      text: input.text,
+      html: input.html,
+      recipientUserId: input.recipientUserId,
+      templateSlug: input.templateSlug,
+    });
+  }
+
   private async writeEmailLog(input: {
-    type: 'verification' | 'notification';
+    type: 'verification' | 'notification' | 'campaign';
     to: string;
     subject: string;
     result: EmailDispatchResult;
@@ -225,6 +248,7 @@ const template = React.createElement(VerifyEmail, {
     const emailTypeMap: Record<string, string> = {
       verification: 'VERIFICATION',
       notification: 'SYSTEM',
+      campaign: 'CAMPAIGN',
     };
     try {
       await this.prisma.emailLog.create({
@@ -247,7 +271,7 @@ const template = React.createElement(VerifyEmail, {
   }
 
   private async dispatchEmail(input: {
-    type: 'verification' | 'notification';
+    type: 'verification' | 'notification' | 'campaign';
     to: string;
     subject: string;
     text: string;

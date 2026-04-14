@@ -3,6 +3,15 @@ import { PrismaService } from '../../common/prisma.service';
 import { EmailService } from '../../common/services/email.service';
 import type { CreateEmailTemplateDto, UpdateEmailTemplateDto, SendEmailDto } from './dto/email.dto';
 
+type Recipient = {
+  email: string;
+  userId?: string;
+  fullName?: string | null;
+  phone?: string | null;
+};
+
+type TemplateVariables = Record<string, string>;
+
 @Injectable()
 export class AdminEmailService {
   private readonly logger = new Logger(AdminEmailService.name);
@@ -98,21 +107,21 @@ export class AdminEmailService {
 
   async sendEmail(dto: SendEmailDto): Promise<{ sent: number; failed: number }> {
     // Resolve template if slug provided
-    let subject = dto.subject ?? '(no subject)';
-    let bodyHtml = dto.bodyHtml ?? '';
-    let bodyText = dto.bodyText ?? '';
+    let subjectTemplate = dto.subject ?? '(no subject)';
+    let bodyHtmlTemplate = dto.bodyHtml ?? '';
+    let bodyTextTemplate = dto.bodyText ?? '';
     let templateSlug: string | undefined;
 
     if (dto.templateSlug) {
       const tpl = await this.prisma.emailTemplate.findUnique({ where: { slug: dto.templateSlug } });
       if (!tpl) throw new NotFoundException(`Template "${dto.templateSlug}" not found`);
-      subject = dto.subject ?? tpl.subject;
-      bodyHtml = tpl.bodyHtml;
-      bodyText = tpl.bodyText;
+      subjectTemplate = dto.subject ?? tpl.subject;
+      bodyHtmlTemplate = tpl.bodyHtml;
+      bodyTextTemplate = tpl.bodyText;
       templateSlug = tpl.slug;
     }
 
-    if (!bodyHtml) throw new BadRequestException('bodyHtml or templateSlug is required');
+    if (!bodyHtmlTemplate) throw new BadRequestException('bodyHtml or templateSlug is required');
 
     // Resolve recipients
     const recipients = await this.resolveRecipients(dto);
@@ -123,26 +132,21 @@ export class AdminEmailService {
 
     for (const r of recipients) {
       try {
-        const result = await this.emailService.sendSystemEmail({
+        const variables = this.buildTemplateVariables(r, dto.variables);
+        const subject = this.renderTemplate(subjectTemplate, variables);
+        const bodyHtml = this.renderTemplate(bodyHtmlTemplate, variables);
+        const bodyText = this.renderTemplate(
+          bodyTextTemplate || 'Please view this email in an HTML-compatible client.',
+          variables,
+        );
+
+        const result = await this.emailService.sendAdminTemplateEmail({
           email: r.email,
           subject,
-          title: subject,
-          message: bodyText || 'Please view this email in an HTML-compatible client.',
-        });
-
-        await this.prisma.emailLog.create({
-          data: {
-            recipientEmail: r.email,
-            recipientUserId: r.userId ?? null,
-            subject,
-            type: 'CAMPAIGN',
-            templateSlug: templateSlug ?? null,
-            status: result.delivered ? 'SENT' : 'FAILED',
-            provider: result.provider,
-            attempts: result.attempts,
-            messageId: result.messageId ?? null,
-            error: result.error ?? null,
-          },
+          html: bodyHtml,
+          text: bodyText,
+          recipientUserId: r.userId,
+          templateSlug,
         });
 
         if (result.delivered) sent++; else failed++;
@@ -155,15 +159,34 @@ export class AdminEmailService {
     return { sent, failed };
   }
 
-  private async resolveRecipients(dto: SendEmailDto): Promise<{ email: string; userId?: string }[]> {
+  private async resolveRecipients(dto: SendEmailDto): Promise<Recipient[]> {
     if (dto.target === 'user') {
       if (!dto.userId) throw new BadRequestException('userId is required for target=user');
       const user = await this.prisma.user.findUnique({
         where: { id: dto.userId },
-        select: { id: true, email: true },
+        select: { id: true, email: true, fullName: true, phone: true },
       });
       if (!user?.email) throw new NotFoundException('User not found or has no email');
-      return [{ email: user.email, userId: user.id }];
+      return [{ email: user.email, userId: user.id, fullName: user.fullName, phone: user.phone }];
+    }
+
+    if (dto.target === 'users') {
+      const userIds = Array.from(new Set((dto.userIds ?? []).filter(Boolean)));
+      if (userIds.length === 0) {
+        throw new BadRequestException('userIds is required for target=users');
+      }
+
+      const users = await this.prisma.user.findMany({
+        where: { id: { in: userIds }, email: { not: null } },
+        select: { id: true, email: true, fullName: true, phone: true },
+      });
+
+      return users.map((u) => ({
+        email: u.email!,
+        userId: u.id,
+        fullName: u.fullName,
+        phone: u.phone,
+      }));
     }
 
     const where: any = { email: { not: null } };
@@ -175,12 +198,12 @@ export class AdminEmailService {
       ];
       const rows = await this.prisma.swapListing.findMany({
         where,
-        select: { userId: true, user: { select: { email: true } } },
+        select: { userId: true, user: { select: { email: true, fullName: true, phone: true } } },
         distinct: ['userId'],
       });
       return rows
         .filter((r) => !!r.user.email)
-        .map((r) => ({ email: r.user.email!, userId: r.userId }));
+        .map((r) => ({ email: r.user.email!, userId: r.userId, fullName: r.user.fullName, phone: r.user.phone }));
     }
 
     if (dto.target === 'subscribed') {
@@ -191,13 +214,51 @@ export class AdminEmailService {
 
     const users = await this.prisma.user.findMany({
       where,
-      select: { id: true, email: true },
+      select: { id: true, email: true, fullName: true, phone: true },
       take: 1000,
     });
 
     return users
       .filter((u) => !!u.email)
-      .map((u) => ({ email: u.email!, userId: u.id }));
+      .map((u) => ({ email: u.email!, userId: u.id, fullName: u.fullName, phone: u.phone }));
+  }
+
+  private buildTemplateVariables(
+    recipient: Recipient,
+    customVariables?: Record<string, string>,
+  ): TemplateVariables {
+    const frontendUrl = (process.env.FRONTEND_URL ?? 'https://tenantswap.africa').replace(/\/$/, '');
+    const fullName = recipient.fullName?.trim() || 'there';
+    const firstName = fullName.split(/\s+/)[0] || fullName;
+
+    const baseVariables: TemplateVariables = {
+      fullName,
+      firstName,
+      email: recipient.email,
+      phone: recipient.phone?.trim() || '',
+      dashboardUrl: `${frontendUrl}/dashboard`,
+    };
+
+    return {
+      ...baseVariables,
+      ...this.normalizeVariables(customVariables),
+    };
+  }
+
+  private normalizeVariables(input?: Record<string, string>): TemplateVariables {
+    if (!input) return {};
+
+    return Object.fromEntries(
+      Object.entries(input)
+        .filter(([, value]) => typeof value === 'string')
+        .map(([key, value]) => [key, value.trim()]),
+    );
+  }
+
+  private renderTemplate(template: string, variables: TemplateVariables): string {
+    return template.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (token, key: string) => {
+      return key in variables ? variables[key] : token;
+    });
   }
 
   // ─── Seed ─────────────────────────────────────────────────────────────────────
