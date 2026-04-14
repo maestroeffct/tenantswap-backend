@@ -26,7 +26,13 @@ export class SendEmailDto {
   @IsOptional() @IsArray() @IsString({ each: true }) userIds?: string[];
   @IsOptional() @IsString() templateSlug?: string;
   @IsOptional() @IsString() subject?: string;
+  @IsOptional() @IsString() headline?: string;
   @IsOptional() @IsString() bodyHtml?: string;
   @IsOptional() @IsString() bodyText?: string;
+  @IsOptional() @IsArray() @IsObject({ each: true }) ctaButtons?: Array<{
+    label?: string;
+    url?: string;
+    variant?: string;
+  }>;
   @IsOptional() @IsObject() variables?: Record<string, string>;
 }
