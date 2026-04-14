@@ -64,6 +64,7 @@ export class AdminController {
       subscriptionCurrency: all[SETTINGS_KEYS.SUBSCRIPTION_CURRENCY],
       subscriptionPlanName: all[SETTINGS_KEYS.SUBSCRIPTION_PLAN_NAME],
       subscriptionDurationDays: Number(all[SETTINGS_KEYS.SUBSCRIPTION_DURATION_DAYS]),
+      emailBranding: this.parseJsonSetting(all[SETTINGS_KEYS.EMAIL_BRANDING_JSON]),
     };
   }
 
@@ -82,8 +83,36 @@ export class AdminController {
       entries[SETTINGS_KEYS.SUBSCRIPTION_PLAN_NAME] = dto.subscriptionPlanName;
     if (dto.subscriptionDurationDays !== undefined)
       entries[SETTINGS_KEYS.SUBSCRIPTION_DURATION_DAYS] = String(dto.subscriptionDurationDays);
+    if (dto.emailBranding !== undefined)
+      entries[SETTINGS_KEYS.EMAIL_BRANDING_JSON] = JSON.stringify(dto.emailBranding);
     await this.systemSettings.setMany(entries as any);
     return this.getSettings();
+  }
+
+  @Post('settings/email-brand-logo')
+  @UseInterceptors(
+    FileInterceptor('image', {
+      storage: memoryStorage(),
+      limits: { fileSize: 5 * 1024 * 1024 },
+      fileFilter: (_req, file, cb) => {
+        if (/^image\/(jpeg|png|webp|svg\+xml)$/.test(file.mimetype)) {
+          cb(null, true);
+        } else {
+          cb(new BadRequestException('Only JPEG, PNG, WebP, or SVG images are allowed'), false);
+        }
+      },
+    }),
+  )
+  async uploadEmailBrandLogo(
+    @CurrentUser() user: CurrentUserPayload,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    if (!file) throw new BadRequestException('No image provided');
+    const url = await this.uploadService.uploadEmailBrandAsset(
+      file.buffer,
+      `${user.id}_${Date.now()}`,
+    );
+    return { url };
   }
 
   // ─── Stats / Overview ─────────────────────────────────────────────────────────
@@ -547,5 +576,16 @@ export class AdminController {
   @Post('email/seed-templates')
   seedEmailTemplates() {
     return this.adminEmail.seedDefaultTemplates();
+  }
+
+  private parseJsonSetting(value: string): Record<string, unknown> {
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>)
+        : {};
+    } catch {
+      return {};
+    }
   }
 }

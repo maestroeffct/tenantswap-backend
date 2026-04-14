@@ -93,4 +93,30 @@ export class UploadService {
     });
   }
 
+  async uploadEmailBrandAsset(buffer: Buffer, assetId: string): Promise<string> {
+    if (!buffer || buffer.length === 0) {
+      throw new BadRequestException('Empty file');
+    }
+
+    return new Promise((resolve, reject) => {
+      cloudinary.uploader
+        .upload_stream(
+          {
+            folder: 'tenantswap/email-branding',
+            public_id: `email_${assetId}`,
+            overwrite: true,
+            transformation: [{ quality: 'auto', fetch_format: 'auto' }],
+          },
+          (error, result) => {
+            if (error || !result) {
+              reject(new InternalServerErrorException('Image upload failed'));
+            } else {
+              resolve(result.secure_url);
+            }
+          },
+        )
+        .end(buffer);
+    });
+  }
+
 }

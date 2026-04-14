@@ -8,6 +8,7 @@ export const SETTINGS_KEYS = {
   SUBSCRIPTION_CURRENCY: 'subscription_currency',
   SUBSCRIPTION_PLAN_NAME: 'subscription_plan_name',
   SUBSCRIPTION_DURATION_DAYS: 'subscription_duration_days',
+  EMAIL_BRANDING_JSON: 'email_branding_json',
 } as const;
 
 export type SettingsKey = (typeof SETTINGS_KEYS)[keyof typeof SETTINGS_KEYS];
@@ -19,6 +20,7 @@ const DEFAULTS: Record<SettingsKey, string> = {
   [SETTINGS_KEYS.SUBSCRIPTION_CURRENCY]: 'NGN',
   [SETTINGS_KEYS.SUBSCRIPTION_PLAN_NAME]: 'basic_monthly',
   [SETTINGS_KEYS.SUBSCRIPTION_DURATION_DAYS]: '30',
+  [SETTINGS_KEYS.EMAIL_BRANDING_JSON]: '{}',
 };
 
 @Injectable()

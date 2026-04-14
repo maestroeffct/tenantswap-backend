@@ -1,4 +1,4 @@
-import { IsBoolean, IsIn, IsInt, IsOptional, IsString, Max, Min, MinLength } from 'class-validator';
+import { IsBoolean, IsIn, IsInt, IsObject, IsOptional, IsString, Max, Min, MinLength } from 'class-validator';
 import { Transform } from 'class-transformer';
 
 export class UpdateSettingsDto {
@@ -33,4 +33,8 @@ export class UpdateSettingsDto {
   @Max(3650)
   @Transform(({ value }) => (value !== undefined ? Number(value) : undefined))
   subscriptionDurationDays?: number;
+
+  @IsOptional()
+  @IsObject()
+  emailBranding?: Record<string, unknown>;
 }
