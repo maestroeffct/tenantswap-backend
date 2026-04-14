@@ -351,13 +351,13 @@ export class AdminEmailService {
   ): EmailButton[] {
     if (!Array.isArray(input)) return [];
 
-    return input
-      .map((button) => ({
-        label: this.renderTemplate(button.label ?? '', variables),
-        url: this.renderTemplate(button.url ?? '', variables),
-        variant: button.variant === 'outline' ? 'outline' : 'solid',
-      }))
-      .filter((button) => button.label.trim() && button.url.trim());
+    const buttons: EmailButton[] = input.map((button) => ({
+      label: this.renderTemplate(button.label ?? '', variables),
+      url: this.renderTemplate(button.url ?? '', variables),
+      variant: button.variant === 'outline' ? 'outline' : 'solid',
+    }));
+
+    return buttons.filter((button) => button.label.trim() && button.url.trim());
   }
 
   private wrapInBrandShell(
