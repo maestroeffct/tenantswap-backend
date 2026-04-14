@@ -36,6 +36,8 @@ import { CreateListingDto } from './dto/create-listing.dto';
 import { VerifyListingDto } from '../listings/dto/verify-listing.dto';
 import { UpdateSettingsDto } from './dto/update-settings.dto';
 import { SystemSettingsService, SETTINGS_KEYS } from '../../common/services/system-settings.service';
+import { AdminEmailService } from './admin-email.service';
+import { CreateEmailTemplateDto, UpdateEmailTemplateDto, SendEmailDto } from './dto/email.dto';
 
 @Controller('admin')
 @UseGuards(JwtAuthGuard, AdminGuard)
@@ -47,6 +49,7 @@ export class AdminController {
     private readonly adminService: AdminService,
     private readonly uploadService: UploadService,
     private readonly systemSettings: SystemSettingsService,
+    private readonly adminEmail: AdminEmailService,
   ) {}
 
   // ─── System Settings ──────────────────────────────────────────────────────────
@@ -481,5 +484,68 @@ export class AdminController {
       search,
       role,
     });
+  }
+
+  // ─── Email Logs ───────────────────────────────────────────────────────────────
+
+  @Get('email/logs')
+  listEmailLogs(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('status') status?: string,
+    @Query('type') type?: string,
+    @Query('search') search?: string,
+  ) {
+    return this.adminEmail.listLogs({
+      page: page ? Number(page) : undefined,
+      limit: limit ? Number(limit) : undefined,
+      status,
+      type,
+      search,
+    });
+  }
+
+  // ─── Email Templates ──────────────────────────────────────────────────────────
+
+  @Get('email/templates')
+  listEmailTemplates() {
+    return this.adminEmail.listTemplates();
+  }
+
+  @Get('email/templates/:id')
+  getEmailTemplate(@Param('id') id: string) {
+    return this.adminEmail.getTemplate(id);
+  }
+
+  @Get('email/templates/:id/preview')
+  previewEmailTemplate(@Param('id') id: string) {
+    return this.adminEmail.previewTemplate(id);
+  }
+
+  @Post('email/templates')
+  createEmailTemplate(@Body() dto: CreateEmailTemplateDto) {
+    return this.adminEmail.createTemplate(dto);
+  }
+
+  @Patch('email/templates/:id')
+  updateEmailTemplate(@Param('id') id: string, @Body() dto: UpdateEmailTemplateDto) {
+    return this.adminEmail.updateTemplate(id, dto);
+  }
+
+  @Delete('email/templates/:id')
+  deleteEmailTemplate(@Param('id') id: string) {
+    return this.adminEmail.deleteTemplate(id);
+  }
+
+  // ─── Email Send ───────────────────────────────────────────────────────────────
+
+  @Post('email/send')
+  sendEmail(@Body() dto: SendEmailDto) {
+    return this.adminEmail.sendEmail(dto);
+  }
+
+  @Post('email/seed-templates')
+  seedEmailTemplates() {
+    return this.adminEmail.seedDefaultTemplates();
   }
 }

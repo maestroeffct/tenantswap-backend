@@ -501,3 +501,55 @@ model SystemSettings {
   value     String
   updatedAt DateTime @updatedAt
 }
+
+enum EmailLogStatus {
+  SENT
+  FAILED
+  SKIPPED
+}
+
+enum EmailType {
+  VERIFICATION
+  MATCH_ALERT
+  VACANCY_ALERT
+  VERIFICATION_APPROVED
+  VERIFICATION_REJECTED
+  CAMPAIGN
+  SYSTEM
+}
+
+model EmailLog {
+  id               String         @id @default(uuid())
+  recipientEmail   String
+  recipientUserId  String?
+  subject          String
+  type             EmailType      @default(SYSTEM)
+  templateSlug     String?
+  status           EmailLogStatus @default(SENT)
+  provider         String         @default("smtp")
+  attempts         Int            @default(1)
+  messageId        String?
+  error            String?
+  createdAt        DateTime       @default(now())
+
+  @@index([recipientUserId, createdAt])
+  @@index([type, status, createdAt])
+  @@index([createdAt])
+}
+
+model EmailTemplate {
+  id          String   @id @default(uuid())
+  name        String
+  slug        String   @unique
+  subject     String
+  bodyHtml    String
+  bodyText    String   @default("")
+  description String   @default("")
+  isSystem    Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([slug])
+  @@index([isActive, createdAt])
+}

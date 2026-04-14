@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import nodemailer, { type Transporter } from 'nodemailer';
 import VerifyEmail from 'emails/VerifyEmail';
@@ -7,6 +7,7 @@ import { render } from '@react-email/components';
 import React from 'react';
 import * as https from 'https';
 import * as querystring from 'querystring';
+import { PrismaService } from '../prisma.service';
 
 export type VerificationEmailInput = {
   fullName: string;
@@ -42,7 +43,10 @@ export class EmailService {
   private readonly mailgunApiKey: string | null;
   private readonly mailgunDomain: string | null;
 
-  constructor(private readonly config: ConfigService) {
+  constructor(
+    private readonly config: ConfigService,
+    @Optional() private readonly prisma?: PrismaService,
+  ) {
     const smtpHost = this.config.get<string>('SMTP_HOST');
     const smtpPort = this.config.get<number>('SMTP_PORT') ?? 587;
     const smtpSecure = this.config.get<boolean>('SMTP_SECURE') ?? false;
@@ -209,12 +213,47 @@ const template = React.createElement(VerifyEmail, {
     });
   }
 
+  private async writeEmailLog(input: {
+    type: 'verification' | 'notification';
+    to: string;
+    subject: string;
+    result: EmailDispatchResult;
+    recipientUserId?: string;
+    templateSlug?: string;
+  }): Promise<void> {
+    if (!this.prisma) return;
+    const emailTypeMap: Record<string, string> = {
+      verification: 'VERIFICATION',
+      notification: 'SYSTEM',
+    };
+    try {
+      await this.prisma.emailLog.create({
+        data: {
+          recipientEmail: input.to,
+          recipientUserId: input.recipientUserId ?? null,
+          subject: input.subject,
+          type: emailTypeMap[input.type] as any ?? 'SYSTEM',
+          templateSlug: input.templateSlug ?? null,
+          status: input.result.delivered ? 'SENT' : input.result.provider === 'log-only' ? 'SKIPPED' : 'FAILED',
+          provider: input.result.provider,
+          attempts: input.result.attempts,
+          messageId: input.result.messageId ?? null,
+          error: input.result.error ?? null,
+        },
+      });
+    } catch (err) {
+      this.logger.warn(`[EMAIL_LOG_FAIL] Could not write email log: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
   private async dispatchEmail(input: {
     type: 'verification' | 'notification';
     to: string;
     subject: string;
     text: string;
     html: string;
+    recipientUserId?: string;
+    templateSlug?: string;
   }): Promise<EmailDispatchResult> {
     const useMailgunApi = !!(this.mailgunApiKey && this.mailgunDomain && this.fromAddress);
     const useSmtp = !!(this.transporter && this.fromAddress);
@@ -223,12 +262,14 @@ const template = React.createElement(VerifyEmail, {
       this.logger.warn(
         `[EMAIL_SKIPPED] type=${input.type} email=${input.to} reason=no_transport_configured`,
       );
-      return {
+      const skippedResult: EmailDispatchResult = {
         delivered: false,
         provider: 'log-only',
         attempts: 0,
         error: 'smtp_not_configured',
       };
+      void this.writeEmailLog({ type: input.type, to: input.to, subject: input.subject, result: skippedResult, recipientUserId: input.recipientUserId, templateSlug: input.templateSlug });
+      return skippedResult;
     }
 
     let lastError = 'unknown_error';
@@ -266,12 +307,14 @@ const template = React.createElement(VerifyEmail, {
           `[EMAIL_SENT] type=${input.type} email=${input.to} attempt=${attempt} messageId=${messageId} provider=${useMailgunApi ? 'mailgun-api' : 'smtp'}`,
         );
 
-        return {
+        const result: EmailDispatchResult = {
           delivered: true,
           provider: 'smtp',
           attempts: attempt,
           messageId,
         };
+        void this.writeEmailLog({ type: input.type, to: input.to, subject: input.subject, result, recipientUserId: input.recipientUserId, templateSlug: input.templateSlug });
+        return result;
       } catch (error: unknown) {
         lastError = error instanceof Error ? error.message : 'unknown_error';
         this.logger.warn(
@@ -288,12 +331,14 @@ const template = React.createElement(VerifyEmail, {
       `[EMAIL_SEND_FAILED] type=${input.type} email=${input.to} attempts=${this.retryMaxAttempts} error="${lastError}"`,
     );
 
-    return {
+    const failResult: EmailDispatchResult = {
       delivered: false,
       provider: 'smtp',
       attempts: this.retryMaxAttempts,
       error: lastError,
     };
+    void this.writeEmailLog({ type: input.type, to: input.to, subject: input.subject, result: failResult, recipientUserId: input.recipientUserId, templateSlug: input.templateSlug });
+    return failResult;
   }
 
   private sleep(ms: number): Promise<void> {
