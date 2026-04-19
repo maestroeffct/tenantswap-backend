@@ -7,6 +7,7 @@ import { PushService } from '../../common/services/push.service';
 import { UploadService } from '../../common/services/upload.service';
 import { SystemSettingsService } from '../../common/services/system-settings.service';
 import { EmailService } from '../../common/services/email.service';
+import { EmailShellService } from '../../common/services/email-shell.service';
 import { MatchingModule } from '../matching/matching.module';
 import { ListingsModule } from '../listings/listings.module';
 import { AdminController } from './admin.controller';
@@ -16,7 +17,7 @@ import { AdminEmailService } from './admin-email.service';
 @Module({
   imports: [MatchingModule, ListingsModule],
   controllers: [AdminController],
-  providers: [AdminGuard, PrismaService, ReliabilityService, PushService, UploadService, AdminService, SystemSettingsService, EmailService, AdminEmailService],
+  providers: [AdminGuard, PrismaService, ReliabilityService, PushService, UploadService, AdminService, SystemSettingsService, EmailService, EmailShellService, AdminEmailService],
   exports: [SystemSettingsService],
 })
 export class AdminModule {}

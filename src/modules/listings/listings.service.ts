@@ -407,19 +407,43 @@ export class ListingsService {
       throw new BadRequestException('Only seeker listings require verification documents');
     }
 
-    if (listing.verificationStatus !== 'PENDING') {
+    const allowedStatuses = ['PENDING', 'REJECTED'];
+    if (!allowedStatuses.includes(listing.verificationStatus ?? '')) {
       throw new BadRequestException('This listing does not require a document upload');
     }
 
     const url = await this.uploadService.uploadVerificationDocument(buffer, listingId);
 
+    const isResubmission = listing.verificationStatus === 'REJECTED';
+
     const updated = await this.prisma.swapListing.update({
       where: { id: listingId },
-      data: { verificationDocumentUrl: url },
+      data: {
+        verificationDocumentUrl: url,
+        // Reset back to PENDING so it re-enters the admin review queue
+        ...(isResubmission && {
+          verificationStatus: 'PENDING',
+          verificationNote: null,
+          status: 'DRAFT',
+        }),
+      },
     });
 
+    if (isResubmission) {
+      await this.notificationService.notifyMany([{
+        userId,
+        type: 'SYSTEM',
+        title: 'Document Re-submitted',
+        message: 'Your document has been re-submitted and is now under review.',
+        channels: ['IN_APP'],
+        payload: { listingId },
+      }]);
+    }
+
     return {
-      message: 'Document uploaded successfully. Your listing is under review.',
+      message: isResubmission
+        ? 'Document re-submitted. We will review it shortly.'
+        : 'Document uploaded successfully. Your listing is under review.',
       listing: updated,
     };
   }

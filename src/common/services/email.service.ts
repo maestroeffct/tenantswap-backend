@@ -2,12 +2,12 @@ import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import nodemailer, { type Transporter } from 'nodemailer';
 import VerifyEmail from 'emails/VerifyEmail';
-import MatchEmail from 'emails/MatchEmail';
 import { render } from '@react-email/components';
 import React from 'react';
 import * as https from 'https';
 import * as querystring from 'querystring';
 import { PrismaService } from '../prisma.service';
+import { EmailShellService } from './email-shell.service';
 
 export type VerificationEmailInput = {
   fullName: string;
@@ -23,6 +23,9 @@ export type SystemEmailInput = {
   message: string;
   actionLabel?: string;
   actionUrl?: string;
+  templateSlug?: string;
+  recipientName?: string;
+  recipientUserId?: string;
 };
 
 export type AdminTemplateEmailInput = {
@@ -55,6 +58,7 @@ export class EmailService {
   constructor(
     private readonly config: ConfigService,
     @Optional() private readonly prisma?: PrismaService,
+    @Optional() private readonly emailShell?: EmailShellService,
   ) {
     const smtpHost = this.config.get<string>('SMTP_HOST');
     const smtpPort = this.config.get<number>('SMTP_PORT') ?? 587;
@@ -190,28 +194,42 @@ const template = React.createElement(VerifyEmail, {
   }
 
   async sendSystemEmail(input: SystemEmailInput): Promise<EmailDispatchResult> {
+    const frontendUrl = this.config.get<string>('FRONTEND_URL') ?? 'https://tenantswap.africa';
     const textLines = [input.title, '', input.message];
-    if (input.actionUrl) {
-      textLines.push('', input.actionUrl);
+    if (input.actionUrl) textLines.push('', input.actionUrl);
+
+    let html: string;
+
+    if (this.emailShell) {
+      // Load admin-configured branding
+      const branding = await this.emailShell.getEmailBranding();
+
+      // Try to use DB template if a slug was provided
+      let bodyHtml = `<p>${input.message}</p>`;
+      if (input.templateSlug) {
+        const tpl = await this.emailShell.getTemplateBySlug(input.templateSlug);
+        if (tpl) {
+          // Replace common tokens in the template body
+          const vars: Record<string, string> = {
+            fullName: input.recipientName ?? 'there',
+            firstName: (input.recipientName ?? 'there').split(' ')[0],
+            dashboardUrl: `${frontendUrl}/dashboard`,
+          };
+          bodyHtml = tpl.bodyHtml.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, k: string) => vars[k] ?? `{{${k}}}`);
+        }
+      }
+
+      html = this.emailShell.wrapInBrandShell(branding, {
+        headline: input.title,
+        bodyHtml,
+        ctaButtons: input.actionUrl
+          ? [{ label: input.actionLabel ?? 'Go to Dashboard', url: input.actionUrl }]
+          : [{ label: 'Open Dashboard', url: `${frontendUrl}/dashboard` }],
+      });
+    } else {
+      // Fallback: plain HTML (should not happen in production)
+      html = `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px"><h2>${input.title}</h2><p>${input.message}</p>${input.actionUrl ? `<p><a href="${input.actionUrl}">${input.actionLabel ?? 'Open'}</a></p>` : ''}</div>`;
     }
-
-    const frontendUrl = this.config.get<string>('FRONTEND_URL') as string;
-    const supportEmail = this.config.get<string>('SUPPORT_EMAIL') ?? "support@tenantswap.com";
-    const companyName = this.config.get<string>('COMPANY_NAME') ?? "TenantSwap";
-
-    const template = React.createElement(MatchEmail, {
-      title: input.title,
-      message: input.message,
-      actionLabel: input.actionLabel ?? "Go to Dashboard",
-      actionUrl: input.actionUrl ?? `${frontendUrl}/dashboard`,
-      footerNote: "Go to your dashboard to see your matches.",
-      previewText: input.subject,
-      appUrl: frontendUrl,
-       supportEmail:supportEmail,
-      companyName: companyName,
-    });
-
-    const html = await render(template);
 
     return this.dispatchEmail({
       type: 'notification',
@@ -219,6 +237,7 @@ const template = React.createElement(VerifyEmail, {
       subject: input.subject,
       text: textLines.join('\n'),
       html,
+      recipientUserId: input.recipientUserId,
     });
   }
 

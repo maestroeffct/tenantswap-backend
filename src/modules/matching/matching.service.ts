@@ -651,7 +651,7 @@ export class MatchingService {
         title: 'Update Your Availability',
         message:
           'Your listed available date has passed. Please update when the apartment will be ready, or mark it as unavailable if it\'s no longer free.',
-        channels: ['IN_APP', 'EMAIL'] as const,
+        channels: ['IN_APP', 'EMAIL', 'SMS'] as const,
         payload: { listingId: l.id },
       })),
     );
@@ -974,6 +974,7 @@ export class MatchingService {
         type: 'CHAIN_BROKEN',
         title: 'Chain Update',
         message: `Your chain has been marked BROKEN (${reason}).`,
+        channels: ['IN_APP', 'EMAIL', 'SMS'] as const,
         payload: {
           reason,
           actorType: options.actorType,
@@ -1115,6 +1116,7 @@ export class MatchingService {
             title: 'Listing Expired',
             message:
               'Your listing expired. Renew it to continue receiving requests.',
+            channels: ['IN_APP', 'EMAIL', 'SMS'] as const,
             payload: {
               listingId: listing.id,
             },
@@ -1166,6 +1168,7 @@ export class MatchingService {
           title: 'Listing Expired',
           message:
             'Your listing expired and open requests were released automatically.',
+          channels: ['IN_APP', 'EMAIL', 'SMS'] as const,
           payload: {
             listingId: listing.id,
             releasedCount: released.count,
@@ -1177,6 +1180,7 @@ export class MatchingService {
           title: 'Request Released',
           message:
             'This listing is no longer active. Your request was released and matching reran.',
+          channels: ['IN_APP', 'EMAIL'] as const,
           payload: {
             listingId: listing.id,
           },
@@ -1187,6 +1191,7 @@ export class MatchingService {
           title: 'Request Released',
           message:
             'A related request was released because one listing expired.',
+          channels: ['IN_APP', 'EMAIL'] as const,
           payload: {
             listingId: listing.id,
           },
@@ -1315,6 +1320,7 @@ export class MatchingService {
           title: 'Request Expired',
           message:
             'Your request expired before it was approved. Matching will continue automatically.',
+          channels: ['IN_APP', 'EMAIL'] as const,
           payload: {
             interestId: interest.id,
             listingId: interest.listingId,
@@ -1325,6 +1331,7 @@ export class MatchingService {
           type: 'INTEREST_EXPIRED',
           title: 'Request Expired',
           message: 'A pending request on your listing has expired.',
+          channels: ['IN_APP', 'EMAIL'] as const,
           payload: {
             interestId: interest.id,
             requesterListingId: interest.requesterListingId,
@@ -1429,6 +1436,7 @@ export class MatchingService {
         message: `A new ${chainType.toLowerCase()} chain was created. Accept before ${
           chain.acceptBy?.toISOString() ?? 'the deadline'
         }.`,
+        channels: ['IN_APP', 'EMAIL', 'SMS'] as const,
         payload: {
           chainType,
           acceptBy: chain.acceptBy?.toISOString() ?? null,
@@ -2768,6 +2776,7 @@ export class MatchingService {
         type: 'RENTER_CONFIRMED',
         title: 'Apartment Confirmed',
         message: ownerMessage,
+        channels: ['IN_APP', 'EMAIL', 'SMS'] as const,
         payload: {
           interestId: interest.id,
           listingId: interest.listingId,
@@ -2779,6 +2788,7 @@ export class MatchingService {
         type: 'RENTER_CONFIRMED',
         title: 'Apartment Confirmed',
         message: requesterMessage,
+        channels: ['IN_APP', 'EMAIL', 'SMS'] as const,
         payload: {
           interestId: interest.id,
           listingId: interest.listingId,
@@ -2792,6 +2802,7 @@ export class MatchingService {
         title: 'Request Released',
         message:
           'This apartment has been confirmed for another renter. Matching has been rerun for you.',
+        channels: ['IN_APP', 'EMAIL'] as const,
         payload: {
           listingId: interest.listingId,
         },
@@ -2962,6 +2973,7 @@ export class MatchingService {
           title: 'Chain Locked',
           message:
             'All members accepted. Your chain is now LOCKED and ready for contact unlock.',
+          channels: ['IN_APP', 'EMAIL', 'SMS'] as const,
         })),
       );
     }
@@ -3086,6 +3098,7 @@ export class MatchingService {
         type: 'MATCH_RERUN',
         title: 'Matching Rerun',
         message: 'Matching has been rerun for your listing by support.',
+        channels: ['IN_APP', 'EMAIL'] as const,
         payload: {
           rerunBy: adminUserId,
         },
@@ -3185,7 +3198,7 @@ export class MatchingService {
           type: 'CONTACT_UNLOCK_APPROVED',
           title: 'Number Unlocked',
           message: `${approverName} has unlocked their phone number for your chain.`,
-          channels: ['IN_APP'] as const,
+          channels: ['IN_APP', 'EMAIL', 'SMS'] as const,
           payload: { chainId: unlock.chainId, unlockId },
         })),
       );

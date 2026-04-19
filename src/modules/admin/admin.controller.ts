@@ -426,6 +426,23 @@ export class AdminController {
     return this.adminService.sendPushToUser(dto.userId, dto.title, dto.body);
   }
 
+  // ─── Connection Requests ──────────────────────────────────────────────────────
+
+  @Get('interests')
+  listInterests(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('status') status?: string,
+    @Query('search') search?: string,
+  ) {
+    return this.adminService.listInterests({
+      page: page ? parseInt(page) : undefined,
+      limit: limit ? parseInt(limit) : undefined,
+      status: status || undefined,
+      search: search || undefined,
+    });
+  }
+
   // ─── Reports ─────────────────────────────────────────────────────────────────
 
   @Get('reports')

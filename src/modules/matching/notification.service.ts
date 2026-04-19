@@ -17,7 +17,7 @@ type NotificationInput = {
   title: string;
   message: string;
   payload?: Prisma.InputJsonValue;
-  channels?: NotificationChannel[];
+  channels?: NotificationChannel[] | readonly NotificationChannel[];
 };
 
 @Injectable()
@@ -114,6 +114,7 @@ export class NotificationService {
         email: true,
         phone: true,
         pushToken: true,
+        fullName: true,
       },
     });
 
@@ -137,6 +138,7 @@ export class NotificationService {
             title: notification.title,
             message: notification.message,
             userId: notification.userId,
+            recipientName: user.fullName ?? undefined,
           }),
         );
       }
@@ -224,7 +226,7 @@ export class NotificationService {
   }
 
   private resolveChannels(
-    channels?: NotificationChannel[],
+    channels?: NotificationChannel[] | readonly NotificationChannel[],
   ): NotificationChannel[] {
     if (!channels || channels.length === 0) {
       return ['IN_APP'];
@@ -240,6 +242,7 @@ export class NotificationService {
       title: string;
       message: string;
       userId: string;
+      recipientName?: string;
     },
   ): Promise<void> {
     const result = await this.emailQueueService.enqueueSystemEmail({
@@ -247,6 +250,8 @@ export class NotificationService {
       subject: `TenantSwap: ${input.title}`,
       title: input.title,
       message: input.message,
+      recipientName: input.recipientName,
+      recipientUserId: input.userId,
     });
 
     this.logger.log(

@@ -1124,6 +1124,83 @@ export class AdminService {
     });
   }
 
+  // ─── Connection Requests (ListingInterest) ────────────────────────────────────
+
+  async listInterests(opts: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    search?: string;
+  }) {
+    const page = Math.max(1, opts.page ?? 1);
+    const limit = Math.min(100, Math.max(1, opts.limit ?? 20));
+    const skip = (page - 1) * limit;
+
+    const where: any = {};
+    if (opts.status) where.status = opts.status;
+    if (opts.search) {
+      const q = opts.search.trim();
+      where.OR = [
+        { requesterUser: { fullName: { contains: q, mode: 'insensitive' } } },
+        { requesterUser: { phone: { contains: q, mode: 'insensitive' } } },
+        { listing: { user: { fullName: { contains: q, mode: 'insensitive' } } } },
+        { listing: { user: { phone: { contains: q, mode: 'insensitive' } } } },
+      ];
+    }
+
+    const [total, items] = await Promise.all([
+      this.prisma.listingInterest.count({ where }),
+      this.prisma.listingInterest.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          status: true,
+          createdAt: true,
+          respondedAt: true,
+          confirmedAt: true,
+          confirmedByRole: true,
+          expiresAt: true,
+          requesterUserId: true,
+          requesterUser: {
+            select: { id: true, fullName: true, phone: true, email: true },
+          },
+          requesterListing: {
+            select: {
+              id: true,
+              listingType: true,
+              desiredType: true,
+              desiredCity: true,
+              desiredState: true,
+              currentType: true,
+              currentCity: true,
+              currentState: true,
+              maxBudget: true,
+            },
+          },
+          listing: {
+            select: {
+              id: true,
+              listingType: true,
+              desiredType: true,
+              desiredCity: true,
+              desiredState: true,
+              currentType: true,
+              currentCity: true,
+              currentState: true,
+              maxBudget: true,
+              user: { select: { id: true, fullName: true, phone: true, email: true } },
+            },
+          },
+        },
+      }),
+    ]);
+
+    return { items, meta: { total, page, limit, pages: Math.ceil(total / limit) } };
+  }
+
   // ─── Caretakers ──────────────────────────────────────────────────────────────
 
   async listCaretakers(opts: { page?: number; limit?: number; search?: string }) {
