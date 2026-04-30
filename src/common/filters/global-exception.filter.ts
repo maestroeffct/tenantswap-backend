@@ -67,6 +67,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
             path: request.url,
             ip: request.ip,
             message,
+            ...(details && details.length > 0 ? { validationErrors: details } : {}),
             ...(meta ? { meta } : {}),
           }),
         );
