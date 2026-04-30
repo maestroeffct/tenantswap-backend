@@ -65,7 +65,7 @@ export class EmailQueueService implements OnModuleInit, OnModuleDestroy {
   async onModuleInit() {
     if (!this.queueEnabled) {
       this.logger.log(
-        'BullMQ disabled for email delivery; falling back to detached in-process dispatch',
+        'BullMQ disabled for email delivery; falling back to detachedd in-process dispatch',
       );
       return;
     }
