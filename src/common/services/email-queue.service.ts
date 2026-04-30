@@ -196,7 +196,9 @@ export class EmailQueueService implements OnModuleInit, OnModuleDestroy {
   private async processJob(job: Job<EmailJob>) {
     if (job.name === VERIFICATION_JOB_NAME) {
       const data = job.data as VerificationEmailJob;
-      const result = await this.emailService.sendVerificationEmail(data.payload);
+      const result = await this.emailService.sendVerificationEmail(
+        data.payload,
+      );
       if (!result.delivered) {
         this.logger.warn(
           `[EMAIL_QUEUE_FALLBACK_LINK] email=${data.payload.email} verificationUrl=${data.payload.verificationUrl}`,
